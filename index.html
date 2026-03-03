@@ -1,82 +1,40 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Hymenoptera AI</title>
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      font-family: Arial, sans-serif;
-      color: white;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding-top: 60px;
-    }
+<script>
+let conversation = [];
 
-    img {
-      width: 180px;
-      margin-bottom: 20px;
-    }
+async function sendMessage() {
+  const input = document.getElementById("userInput");
+  const responseElement = document.getElementById("response");
+  const message = input.value;
 
-    h1 {
-      color: #3aa0ff;
-      letter-spacing: 4px;
-      margin-bottom: 40px;
-    }
+  if (!message) return;
 
-    input {
-      padding: 10px;
-      width: 300px;
-      margin-right: 10px;
-    }
+  responseElement.innerText = "Thinking...";
 
-    button {
-      padding: 10px 20px;
-      background: #3aa0ff;
-      border: none;
-      color: black;
-      font-weight: bold;
-      cursor: pointer;
-    }
+  // Add user message to conversation
+  conversation.push({
+    role: "user",
+    content: message
+  });
 
-    #response {
-      margin-top: 20px;
-      max-width: 600px;
-    }
-  </style>
-</head>
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      messages: conversation
+    })
+  });
 
-<body>
+  const data = await res.json();
 
-  <img src="/logo-icon.png" alt="Hymenoptera Logo" />
+  // Add AI reply to conversation
+  conversation.push({
+    role: "assistant",
+    content: data.reply
+  });
 
-  <h1>HYMENOPTERA</h1>
-
-  <input id="userInput" placeholder="Type your message..." />
-  <button onclick="sendMessage()">Send</button>
-
-  <p id="response"></p>
-
-  <script>
-    async function sendMessage() {
-      const message = document.getElementById("userInput").value;
-      const responseElement = document.getElementById("response");
-
-      responseElement.innerText = "Thinking...";
-
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ message })
-      });
-
-      const data = await res.json();
-      responseElement.innerText = data.reply;
-    }
-  </script>
-
-</body>
-</html>
+  responseElement.innerText = data.reply;
+  input.value = "";
+}
+</script>
