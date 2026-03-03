@@ -2,17 +2,17 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>HYMENOPTERA</title>
+  <title>Hymenoptera</title>
 
-  <!-- Tech Font -->
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+  <!-- Premium Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
     body {
       margin: 0;
       background: #000000;
       color: white;
-      font-family: 'Orbitron', sans-serif;
+      font-family: 'Inter', sans-serif;
       display: flex;
       flex-direction: column;
       height: 100vh;
@@ -20,42 +20,45 @@
 
     header {
       text-align: center;
-      padding: 70px 20px 40px 20px;
+      padding: 40px 20px 20px 20px;
       border-bottom: 1px solid #111;
     }
 
     .logo {
-      height: 110px;
-      margin-bottom: 25px;
+      height: 90px;
+      margin-bottom: 15px;
       display: block;
       margin-left: auto;
       margin-right: auto;
+      background: transparent;
     }
 
     .brand {
-      font-size: 36px;
-      font-weight: 700;
-      letter-spacing: 6px;
-      color: #338FD5; /* Exact logo blue */
+      font-size: 30px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      color: #338FD5;
     }
 
     #chat {
       flex: 1;
       overflow-y: auto;
-      padding: 50px;
+      padding: 40px;
+      background: linear-gradient(to bottom, #000000 0%, #050505 100%);
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 18px;
     }
 
     .message {
       max-width: 65%;
-      padding: 16px 20px;
-      border-radius: 18px;
+      padding: 14px 18px;
+      border-radius: 16px;
       line-height: 1.6;
-      font-size: 14px;
+      font-size: 15px;
       word-wrap: break-word;
-      letter-spacing: 1px;
+      animation: fadeIn 0.25s ease forwards;
+      opacity: 0;
     }
 
     .user {
@@ -70,9 +73,13 @@
       border: 1px solid #1a1a1a;
     }
 
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
     #inputArea {
       display: flex;
-      padding: 25px;
+      padding: 20px;
       border-top: 1px solid #111;
       background: #000;
     }
@@ -80,38 +87,45 @@
     input {
       flex: 1;
       padding: 16px;
-      background: #111;
-      border: 1px solid #1a1a1a;
+      background: #0a0a0a;
+      border: 1px solid #1f1f1f;
       color: white;
-      border-radius: 16px;
+      border-radius: 18px;
       outline: none;
-      font-size: 14px;
-      font-family: 'Orbitron', sans-serif;
-      letter-spacing: 1px;
+      font-size: 15px;
+      transition: 0.2s ease;
     }
 
     input::placeholder {
       color: #444;
     }
 
+    input:focus {
+      border-color: #338FD5;
+      box-shadow: 0 0 0 2px rgba(51, 143, 213, 0.2);
+    }
+
     button {
-      margin-left: 16px;
-      padding: 16px 30px;
+      margin-left: 14px;
+      padding: 14px 28px;
       background: #338FD5;
       border: none;
       color: white;
-      border-radius: 16px;
+      border-radius: 18px;
       cursor: pointer;
       font-weight: 600;
-      font-family: 'Orbitron', sans-serif;
-      letter-spacing: 2px;
+      font-size: 14px;
       transition: 0.2s ease;
     }
 
     button:hover {
       background: #2c7fc0;
+      transform: translateY(-1px);
     }
 
+    button:active {
+      transform: translateY(0px);
+    }
   </style>
 </head>
 
@@ -119,14 +133,14 @@
 
   <header>
     <img src="logo-icon.png" class="logo" />
-    <div class="brand">HYMENOPTERA</div>
+    <div class="brand">Hymenoptera</div>
   </header>
 
   <div id="chat"></div>
 
   <div id="inputArea">
-    <input id="userInput" placeholder="SEND A MESSAGE..." />
-    <button onclick="sendMessage()">SEND</button>
+    <input id="userInput" placeholder="Send a message..." />
+    <button onclick="sendMessage()">Send</button>
   </div>
 
   <script>
@@ -155,7 +169,7 @@
 
       input.value = "";
 
-      addMessage("PROCESSING...", "assistant");
+      addMessage("Thinking...", "assistant");
 
       const res = await fetch("/api/chat", {
         method: "POST",
