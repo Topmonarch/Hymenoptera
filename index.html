@@ -1,40 +1,86 @@
-<script>
-let conversation = [];
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hymenoptera AI</title>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      background: black;
+      color: white;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 60px;
+    }
 
-async function sendMessage() {
-  const input = document.getElementById("userInput");
-  const responseElement = document.getElementById("response");
-  const message = input.value;
+    input {
+      padding: 10px;
+      width: 300px;
+    }
 
-  if (!message) return;
+    button {
+      padding: 10px;
+      margin-left: 5px;
+    }
 
-  responseElement.innerText = "Thinking...";
+    #response {
+      margin-top: 20px;
+      max-width: 600px;
+      text-align: center;
+    }
+  </style>
+</head>
 
-  // Add user message to conversation
-  conversation.push({
-    role: "user",
-    content: message
-  });
+<body>
 
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      messages: conversation
-    })
-  });
+  <h1>Hymenoptera AI</h1>
 
-  const data = await res.json();
+  <div>
+    <input id="userInput" placeholder="Type your message..." />
+    <button onclick="sendMessage()">Send</button>
+  </div>
 
-  // Add AI reply to conversation
-  conversation.push({
-    role: "assistant",
-    content: data.reply
-  });
+  <div id="response"></div>
 
-  responseElement.innerText = data.reply;
-  input.value = "";
-}
-</script>
+  <script>
+    let conversation = [];
+
+    async function sendMessage() {
+      const input = document.getElementById("userInput");
+      const responseElement = document.getElementById("response");
+      const message = input.value;
+
+      if (!message) return;
+
+      responseElement.innerText = "Thinking...";
+
+      conversation.push({
+        role: "user",
+        content: message
+      });
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messages: conversation
+        })
+      });
+
+      const data = await res.json();
+
+      conversation.push({
+        role: "assistant",
+        content: data.reply
+      });
+
+      responseElement.innerText = data.reply;
+      input.value = "";
+    }
+  </script>
+
+</body>
+</html>
