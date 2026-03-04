@@ -29,6 +29,7 @@ body {
   display: flex;
   flex-direction: column;
   padding: 15px;
+  background: linear-gradient(180deg, #0b0b0b 0%, #050505 100%);
 }
 
 .new-chat {
@@ -86,6 +87,7 @@ body {
   letter-spacing: 4px;
   text-transform: uppercase;
   color: #2D8CFF;
+  text-shadow: 0 0 12px rgba(45, 140, 255, 0.6);
 }
 
 /* Chat Messages */
@@ -104,6 +106,10 @@ body {
   padding: 14px 18px;
   border-radius: 14px;
   line-height: 1.5;
+  animation: fadeIn 0.2s ease-in-out;
+  @keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .user {
