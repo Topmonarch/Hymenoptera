@@ -14,10 +14,11 @@
 }
 
 body {
-  display: flex;
-  height: 100vh;
-  background: #000;
-  color: white;
+ display:flex;
+ height:100vh;
+ background:radial-gradient(circle at top,#0c0c0c,#000000);
+ color:white;
+ font-family:Arial, Helvetica, sans-serif;
 }
 
 /* ===== SIDEBAR ===== */
@@ -121,9 +122,10 @@ body {
 }
 
 .assistant {
-  align-self: flex-start;
-  background: #111;
-  border: 1px solid #222;
+  align-self:flex-start;
+  background:#111;
+  border:1px solid #1a1a1a;
+  color:white;
 }
 
 /* Input Area */
@@ -145,14 +147,20 @@ input {
 }
 
 button {
-  margin-left: 10px;
-  padding: 14px 18px;
-  background: #2D8CFF;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: bold;
-  color: black;
+ background:#2D8CFF;
+ border:none;
+ padding:12px 18px;
+ border-radius:10px;
+ color:white;
+ cursor:pointer;
+ box-shadow:0 0 10px rgba(45,140,255,0.6);
+ transition:0.2s;
+}
+
+button:hover {
+box-shadow:0 0 18px rgba(45,140,255,0.9);
+transform:scale(1.05);
+}
 }
 
 button:hover {
@@ -203,7 +211,22 @@ function addMessage(content, role) {
 }
 
 async function sendMessage() {
+  const div = document.createElement("div");
+  div.classList.add("message","assistant");
+  chat.appendChild(div);
 
+  let i = 0;
+
+  function typing() {
+    if (i < text.length) {
+      div.textContent += text.charAt(i);
+      i++;
+      setTimeout(typing, 20);
+    }
+  }
+
+  typing();
+}
   const input = document.getElementById("userInput");
   const message = input.value.trim();
   if (!message) return;
@@ -234,7 +257,7 @@ async function sendMessage() {
     content: data.reply
   });
 
-  addMessage(data.reply, "assistant");
+  typeMessage(data.reply);
 }
 
 document.getElementById("userInput")
