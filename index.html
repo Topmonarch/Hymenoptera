@@ -267,36 +267,83 @@ document.getElementById("userInput")
 
  <script>
 
-  document.getElementById("userInput")
-.addEventListener("keydown", function(e) {
-  if (e.key === "Enter") sendMessage();
-});
+document.addEventListener("DOMContentLoaded", function () {
 
-async function sendMessage() {
-
+  const chat = document.getElementById("chat");
   const input = document.getElementById("userInput");
-  const message = input.value.trim();
 
-  if (!message) return;
+  let conversation = [];
 
-  addMessage(message, "user");
+  function addMessage(content, role) {
+    const div = document.createElement("div");
+    div.classList.add("message", role);
+    div.innerText = content;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
 
-  input.value = "";
+  function typeMessage(text) {
+    const div = document.createElement("div");
+    div.classList.add("message", "assistant");
+    chat.appendChild(div);
 
-  addMessage("Thinking...", "assistant");
+    let i = 0;
 
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: conversation })
+    function typing() {
+      if (i < text.length) {
+        div.textContent += text.charAt(i);
+        i++;
+        setTimeout(typing, 20);
+      }
+    }
+
+    typing();
+  }
+
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      sendMessage();
+    }
   });
 
-  const data = await res.json();
+  async function sendMessage() {
 
-  chat.lastChild.remove();
+    const message = input.value.trim();
 
-  typeMessage(data.reply);
-}
+    if (!message) return;
+
+    addMessage(message, "user");
+
+    conversation.push({
+      role: "user",
+      content: message
+    });
+
+    input.value = "";
+
+    addMessage("Thinking...", "assistant");
+
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ messages: conversation })
+    });
+
+    const data = await res.json();
+
+    chat.lastChild.remove();
+
+    conversation.push({
+      role: "assistant",
+      content: data.reply
+    });
+
+    typeMessage(data.reply);
+  }
+
+});
 
 </script>
 
