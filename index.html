@@ -98,6 +98,12 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
 .form-actions { display:flex; gap:8px; margin-top:8px; justify-content:space-between; align-items:center; }
 .form-toggle { font-size:13px; color:#9aa; cursor:pointer; text-decoration:underline; }
 
+.guest-note { font-size:13px; color:#9aa; margin-top:8px; text-align:center; }
+
+/* "Continue as Guest" button style */
+.guest-btn { width:100%; margin-top:10px; padding:10px; border-radius:8px; border:1px dashed #444; background:transparent; color:#ddd; cursor:pointer; }
+
+/* small helpers */
 .hidden { display:none; }
 
 /* Small responsiveness */
@@ -166,6 +172,11 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
             <button type="submit" class="btn primary">Sign In</button>
             <div class="form-toggle" id="showSignup">Create an account →</div>
           </div>
+
+          <!-- Continue as Guest -->
+          <button type="button" id="continueGuestBtn" class="guest-btn">Continue as Guest</button>
+          <div class="guest-note">Guest sessions are temporary and chat history will not be saved.</div>
+
           <div id="signinError" style="color:#ff8b8b;margin-top:8px;"></div>
         </form>
       </div>
@@ -196,8 +207,9 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
     </div>
   </div>
 
-  <!-- Scripts -->
+  <!-- Scripts: auth first so chat.js can check session/capabilities -->
   <script src="auth.js"></script>
   <script src="chat.js"></script>
 </body>
+</html>
 </html>
