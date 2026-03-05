@@ -1,6 +1,4 @@
-export default async function handler(req, res) {
-
-  if (req.method !== "POST") {
+if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
@@ -8,7 +6,12 @@ export default async function handler(req, res) {
 
     const { messages } = req.body;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // convert the incoming chat-style messages into a single text input for the new Responses API
+    const conversation = messages
+      .map((m) => `${m.role}: ${m.content}`)
+      .join("\n");
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -16,13 +19,14 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        messages: messages
+        input: conversation
       })
     });
 
     const data = await response.json();
 
-    const reply = data.choices[0].message.content;
+    // new API returns an output array; take the first text snippet
+    const reply = data.output?.[0]?.content?.[0]?.text || "";
 
     res.status(200).json({ reply });
 
@@ -33,5 +37,8 @@ export default async function handler(req, res) {
     });
 
   }
+
+}
+
 
 }
