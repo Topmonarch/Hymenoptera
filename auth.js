@@ -1,11 +1,8 @@
 // auth.js
-// Simple frontend authentication logic using localStorage for temporary session storage.
-// Responsibilities:
-// - Show Sign In / Sign Up forms before chat is accessible
-// - Allow creating a local account (stored in localStorage: 'hym_users')
-// - Create a session on sign-in (localStorage key: 'hym_session')
-// - Show logged-in user's email in the header and show Settings / Logout buttons
-// - Ensure chat input is only usable when logged in
+// Extended frontend authentication logic with "Continue as Guest" support.
+// - Sign In / Sign Up with localStorage-based temporary accounts
+// - Continue as Guest creates a temporary guest session (no history saving)
+// - Exposes window.hymAuth with helpers: isLoggedIn, isGuest, currentUser, canSaveHistory, requireAuth
 
 (function () {
   // DOM elements
@@ -26,6 +23,8 @@
 
   const signinError = document.getElementById('signinError');
   const signupError = document.getElementById('signupError');
+
+  const continueGuestBtn = document.getElementById('continueGuestBtn');
 
   const displayEmail = document.getElementById('displayEmail');
   const settingsBtn = document.getElementById('settingsBtn');
@@ -53,8 +52,17 @@
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
   }
 
-  function setSession(email) {
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ email }));
+  // Session management
+  function setSession(email, opts = {}) {
+    // opts.guest = boolean
+    const session = { email: email || null, guest: !!opts.guest, createdAt: Date.now() };
+    // For guest sessions, we still persist in localStorage so page reload keeps temporary session.
+    // They are intended to be temporary; logout will clear them.
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  }
+  function setGuestSessionTemporary() {
+    // Create a guest session with email "Guest User"
+    setSession('Guest User', { guest: true });
   }
   function clearSession() {
     localStorage.removeItem(SESSION_KEY);
@@ -86,11 +94,18 @@
 
   function updateUIForAuth() {
     const session = getSession();
-    if (session && session.email) {
-      // logged in
-      displayEmail.textContent = session.email;
+    if (session && (session.email || session.guest)) {
+      // logged in (or guest)
+      const isGuest = !!session.guest;
+      displayEmail.textContent = session.email || (isGuest ? 'Guest User' : '');
       displayEmail.classList.remove('hidden');
-      settingsBtn.classList.remove('hidden');
+
+      // Settings only for fully authenticated users (not guest)
+      if (!isGuest) {
+        settingsBtn.classList.remove('hidden');
+      } else {
+        settingsBtn.classList.add('hidden');
+      }
       logoutBtn.classList.remove('hidden');
 
       // Hide auth panel and enable chat input
@@ -99,11 +114,15 @@
       sendBtn.disabled = false;
       newChatBtn.disabled = false;
 
-      // Optionally, show a welcome message in chat if empty
+      // For guest sessions, show a mild notice (placed in chat)
       if (!chatContainer.querySelector('.message')) {
         const el = document.createElement('div');
         el.className = 'message assistant';
-        el.textContent = `Welcome back, ${session.email}! Ask me anything.`;
+        if (isGuest) {
+          el.textContent = `You're signed in as a Guest. Chat history will not be saved.`;
+        } else {
+          el.textContent = `Welcome back, ${session.email}! Ask me anything.`;
+        }
         chatContainer.appendChild(el);
       }
     } else {
@@ -117,10 +136,6 @@
       userInput.disabled = true;
       sendBtn.disabled = true;
       newChatBtn.disabled = true;
-
-      // Optionally, clear chat area so content isn't visible when logged out.
-      // We keep messages visible in this simple implementation but you can clear if desired.
-      // chatContainer.innerHTML = '';
     }
   }
 
@@ -159,7 +174,7 @@
     saveUsers(users);
 
     // Create session and update UI
-    setSession(email);
+    setSession(email, { guest: false });
     signupEmail.value = signupPassword.value = signupConfirm.value = '';
     updateUIForAuth();
   });
@@ -183,8 +198,28 @@
     }
 
     // success
-    setSession(email);
+    setSession(email, { guest: false });
     signinEmail.value = signinPassword.value = '';
+    updateUIForAuth();
+  });
+
+  // Continue as Guest handler
+  continueGuestBtn.addEventListener('click', function () {
+    // Create a temporary guest session
+    setGuestSessionTemporary();
+
+    // Important: Ensure we disable any local saving that might have persisted from a previous logged-in user.
+    // Clear well-known local keys that might contain saved chat (best-effort; chat.js should check hymAuth.canSaveHistory())
+    try {
+      // Common keys that might be used by chat.js — remove to ensure guest does not inherit history.
+      const potentialKeys = ['hym_messages', 'hym_conversations', 'hym_chat', 'chat_history', 'hym_last_chat'];
+      potentialKeys.forEach((k) => {
+        if (localStorage.getItem(k)) localStorage.removeItem(k);
+      });
+    } catch (e) {
+      // ignore storage errors
+    }
+
     updateUIForAuth();
   });
 
@@ -201,7 +236,18 @@
 
   logoutBtn.addEventListener('click', function () {
     clearSession();
-    // Optionally remove any chat-related session keys here.
+
+    // If guest, nothing to persist; if regular user, you may want to clear local-only chat storage for privacy.
+    // We'll remove common chat keys for safety.
+    try {
+      const potentialKeys = ['hym_messages', 'hym_conversations', 'hym_chat', 'chat_history', 'hym_last_chat'];
+      potentialKeys.forEach((k) => {
+        if (localStorage.getItem(k)) localStorage.removeItem(k);
+      });
+    } catch (e) {
+      // ignore storage errors
+    }
+
     updateUIForAuth();
     // Inform user
     alert('You have been logged out.');
@@ -209,7 +255,7 @@
 
   settingsBtn.addEventListener('click', function () {
     const session = getSession();
-    if (!session) return;
+    if (!session || session.guest) return;
     // Simple settings placeholder
     alert(`Settings for ${session.email}\n\n(Placeholder)`);
   });
@@ -222,10 +268,27 @@
   // Initialize UI based on session
   updateUIForAuth();
 
-  // Expose a small API for other scripts (e.g., chat.js) to query session
+  // Expose a small API for other scripts (e.g., chat.js) to query session and capabilities
   window.hymAuth = {
-    isLoggedIn: function () { return !!getSession(); },
-    currentUser: function () { const s = getSession(); return s ? s.email : null; },
+    isLoggedIn: function () {
+      const s = getSession();
+      return !!(s && !s.guest && s.email);
+    },
+    isGuest: function () {
+      const s = getSession();
+      return !!(s && s.guest);
+    },
+    currentUser: function () {
+      const s = getSession();
+      if (!s) return null;
+      // For guest sessions, return 'Guest User' string as requested.
+      return s.guest ? 'Guest User' : s.email;
+    },
+    canSaveHistory: function () {
+      const s = getSession();
+      // Only allow saving chat history for authenticated (non-guest) users
+      return !!(s && !s.guest && s.email);
+    },
     requireAuth: function () {
       const s = getSession();
       if (!s) {
@@ -233,6 +296,10 @@
         return false;
       }
       return true;
-    }
+    },
+    // helpers for programmatic sign out/sign in
+    signOut: function () { clearSession(); updateUIForAuth(); },
+    signInProgrammatic: function (email) { setSession(email, { guest: false }); updateUIForAuth(); },
+    continueAsGuest: function () { setGuestSessionTemporary(); updateUIForAuth(); }
   };
 })();
