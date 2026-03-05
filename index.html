@@ -25,18 +25,46 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
 .main { flex: 1; display:flex; flex-direction:column; }
 
 /* Header */
+/* Use position:relative so we can center the brand (logo + title) in the top center */
 .header {
-  display:flex; align-items:center; justify-content:space-between;
+  position: relative;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end; /* keep user area on the right */
   padding:16px 20px; border-bottom:1px solid #111;
+  min-height:72px;
 }
-.brand {
-  display:flex; align-items:center; gap:12px;
-}
-.logo { height:44px; width:44px; background:linear-gradient(90deg,#2D8CFF,#8A2BE2); border-radius:8px; box-shadow:0 0 12px rgba(45,140,255,0.2); }
-.title { font-size:20px; font-weight:800; color:#2D8CFF; letter-spacing:2px; text-transform:uppercase; }
 
-/* User area */
-.user-area { display:flex; align-items:center; gap:10px; color:#ddd; }
+/* Centered brand (logo + title) placed absolutely in the center of the header */
+.center-brand {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display:flex;
+  align-items:center;
+  gap:12px;
+  text-align:center;
+}
+.center-brand img.logo-img {
+  width:56px;
+  height:56px;
+  object-fit:contain;
+  border-radius:8px;
+  box-shadow: 0 6px 20px rgba(45,140,255,0.12);
+  background: linear-gradient(90deg,#2D8CFF,#8A2BE2);
+  padding:6px;
+}
+.center-brand .title {
+  font-size:18px;
+  font-weight:800;
+  color:#2D8CFF;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  text-shadow: 0 0 12px rgba(45,140,255,0.12);
+}
+
+/* User area (right) */
+.user-area { display:flex; align-items:center; gap:10px; color:#ddd; z-index:2; }
 .user-email { font-size:14px; color:#a7f; }
 .btn { background:#222; color:#ddd; border:1px solid #333; padding:8px 10px; border-radius:6px; cursor:pointer; }
 .btn.primary { background:#2D8CFF; color:black; border:none; }
@@ -76,13 +104,14 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
 @media (max-width:800px) {
   .sidebar { display:none; }
   .auth-card { width:92%; }
+  .center-brand img.logo-img { width:48px; height:48px; }
 }
 </style>
 </head>
 <body>
   <!-- Sidebar (kept minimal; removed chat history list and localStorage-based items) -->
   <div class="sidebar">
-    <div class="logo" aria-hidden="true"></div>
+    <div style="height:44px;width:44px;background:linear-gradient(90deg,#2D8CFF,#8A2BE2);border-radius:8px;"></div>
     <div style="font-weight:800;color:#2D8CFF;letter-spacing:2px;">Hymenoptera</div>
     <button id="newChatBtn" class="new-chat">New Chat</button>
     <!-- Chat list removed as requested -->
@@ -94,13 +123,14 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
   <!-- Main area -->
   <div class="main">
     <div class="header">
-      <div class="brand">
-        <div class="logo" aria-hidden="true"></div>
-        <div class="title">Hymenoptera AI</div>
+      <!-- Centered logo + title -->
+      <div class="center-brand" aria-hidden="false">
+        <img src="logo-icon.png" alt="Hymenoptera logo" class="logo-img" />
+        <div class="title">HYMENOPTERA AI</div>
       </div>
 
+      <!-- User area aligned to the right -->
       <div class="user-area" id="userArea">
-        <!-- When logged out, auth UI appears before chat. When logged in, these populate. -->
         <div id="displayEmail" class="user-email hidden"></div>
         <button id="settingsBtn" class="btn hidden">Settings</button>
         <button id="logoutBtn" class="btn hidden">Logout</button>
@@ -168,7 +198,6 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
 
   <!-- Scripts -->
   <script src="auth.js"></script>
-  <!-- Keep existing chat.js (should handle sending/receiving messages). auth.js will ensure chat is only accessible when logged in. -->
   <script src="chat.js"></script>
 </body>
 </html>
