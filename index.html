@@ -260,90 +260,83 @@ async function sendMessage() {
   typeMessage(data.reply);
 }
 
-document.getElementById("userInput")
-.addEventListener("keydown", function(e) {
-  if (e.key === "Enter") sendMessage();
+<script>
+
+let conversation = [];
+
+const chat = document.getElementById("chat");
+const input = document.getElementById("userInput");
+
+function addMessage(content, role) {
+  const div = document.createElement("div");
+  div.classList.add("message", role);
+  div.innerText = content;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function typeMessage(text) {
+  const div = document.createElement("div");
+  div.classList.add("message", "assistant");
+  chat.appendChild(div);
+
+  let i = 0;
+
+  function typing() {
+    if (i < text.length) {
+      div.textContent += text.charAt(i);
+      i++;
+      setTimeout(typing, 20);
+    }
+  }
+
+  typing();
+}
+
+input.addEventListener("keydown", function(e) {
+  if (e.key === "Enter") {
+    sendMessage();
+  }
 });
 
- <script>
+async function sendMessage() {
 
-document.addEventListener("DOMContentLoaded", function () {
+  const message = input.value.trim();
 
-  const chat = document.getElementById("chat");
-  const input = document.getElementById("userInput");
+  if (!message) return;
 
-  let conversation = [];
+  addMessage(message, "user");
 
-  function addMessage(content, role) {
-    const div = document.createElement("div");
-    div.classList.add("message", role);
-    div.innerText = content;
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-  }
-
-  function typeMessage(text) {
-    const div = document.createElement("div");
-    div.classList.add("message", "assistant");
-    chat.appendChild(div);
-
-    let i = 0;
-
-    function typing() {
-      if (i < text.length) {
-        div.textContent += text.charAt(i);
-        i++;
-        setTimeout(typing, 20);
-      }
-    }
-
-    typing();
-  }
-
-  input.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") {
-      sendMessage();
-    }
+  conversation.push({
+    role: "user",
+    content: message
   });
 
-  async function sendMessage() {
+  input.value = "";
 
-    const message = input.value.trim();
+  addMessage("Thinking...", "assistant");
 
-    if (!message) return;
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      messages: conversation
+    })
+  });
 
-    addMessage(message, "user");
+  const data = await res.json();
 
-    conversation.push({
-      role: "user",
-      content: message
-    });
+  chat.lastChild.remove();
 
-    input.value = "";
+  conversation.push({
+    role: "assistant",
+    content: data.reply
+  });
 
-    addMessage("Thinking...", "assistant");
-
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ messages: conversation })
-    });
-
-    const data = await res.json();
-
-    chat.lastChild.remove();
-
-    conversation.push({
-      role: "assistant",
-      content: data.reply
-    });
-
-    typeMessage(data.reply);
-  }
-
-});
+  typeMessage(data.reply);
+}
 
 </script>
 
