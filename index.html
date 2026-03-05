@@ -213,112 +213,106 @@ button:disabled {
   
 <script>
 
-  let chats = [];
-  let currentChat = [];
+let chats = JSON.parse(localStorage.getItem("hymenoptera_chats")) || {};
+let currentChat = "chat1";
 
-  function scrollChat() {
-  const chat = document.getElementById("chat");
-  chat.scrollTop = chat.scrollHeight;
+function saveChats() {
+  localStorage.setItem("hymenoptera_chats", JSON.stringify(chats));
 }
 
-let conversation = [];
+function loadChat(name) {
 
-const chat = document.getElementById("chat");
-const input = document.getElementById("userInput");
-const sendBtn = document.getElementById("sendBtn");
+  currentChat = name;
 
-function addMessage(content, role) {
-  const div = document.createElement("div");
-  div.classList.add("message", role);
-  div.innerText = content;
-  chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
+  const chatBox = document.getElementById("chat");
+  chatBox.innerHTML = "";
+
+  if (!chats[name]) chats[name] = [];
+
+  chats[name].forEach(m => {
+    addMessage(m.content, m.role, false);
+  });
+
 }
 
-function typeMessage(text) {
-  const div = document.createElement("div");
-  div.classList.add("message", "assistant");
-  chat.appendChild(div);
+function addMessage(text, role, save = true) {
 
-  let i = 0;
+  const chatBox = document.getElementById("chat");
 
-  function typing() {
-    if (i < text.length) {
-      div.textContent += text.charAt(i);
-      i++;
-      setTimeout(typing, 20);
-    }
+  const msg = document.createElement("div");
+  msg.className = role;
+
+  msg.innerText = text;
+
+  chatBox.appendChild(msg);
+
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  if (save) {
+    chats[currentChat].push({
+      role: role,
+      content: text
+    });
+
+    saveChats();
   }
 
-  typing();
 }
-
-input.addEventListener("keydown", function(e) {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
-  }
-});
 
 async function sendMessage() {
+
+  const input = document.getElementById("userInput");
+
   const message = input.value.trim();
 
   if (!message) return;
 
-  sendBtn.disabled = true;
-  input.disabled = true;
-
   addMessage(message, "user");
-
-  conversation.push({
-    role: "user",
-    content: message
-  });
 
   input.value = "";
 
-  addMessage("Thinking...", "assistant");
+  addMessage("Thinking...", "assistant", false);
 
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        messages: conversation
-      })
-    });
+  const res = await fetch("/api/chat", {
 
-    const data = await res.json();
+    method: "POST",
 
-    if (!res.ok) {
-      chat.lastChild.remove();
-      addMessage(`Error: ${data.error || data.reply || "Failed to get response"}`, "assistant");
-      return;
-    }
+    headers: {
+      "Content-Type": "application/json"
+    },
 
-    chat.lastChild.remove();
+    body: JSON.stringify({
+      messages: chats[currentChat]
+    })
 
-    const reply = data.reply || "No response received";
+  });
 
-    conversation.push({
-      role: "assistant",
-      content: reply
-    });
+  const data = await res.json();
 
-    typeMessage(reply);
+  const chatBox = document.getElementById("chat");
 
-  } catch (error) {
-    console.error("Error:", error);
-    chat.lastChild.remove();
-    addMessage(`Error: ${error.message}`, "assistant");
-  } finally {
-    sendBtn.disabled = false;
-    input.disabled = false;
-    input.focus();
-  }
+  chatBox.lastChild.remove();
+
+  addMessage(data.reply, "assistant");
+
 }
+
+document.getElementById("userInput")
+.addEventListener("keydown", function(e) {
+
+  if (e.key === "Enter") {
+    sendMessage();
+  }
+
+});
+
+window.onload = () => {
+
+  if (!chats["chat1"]) chats["chat1"] = [];
+
+  loadChat("chat1");
+
+};
 
 </script>
 
