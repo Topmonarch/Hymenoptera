@@ -134,6 +134,7 @@ body {
   padding: 20px;
   border-top: 1px solid #111;
   display: flex;
+  gap: 10px;
 }
 
 input {
@@ -144,17 +145,23 @@ input {
   background: #0f0f0f;
   color: white;
   outline: none;
+  font-size: 16px;
+}
+
+input::placeholder {
+  color: #666;
 }
 
 button {
  background:#2D8CFF;
  border:none;
- padding:12px 18px;
- border-radius:10px;
+ padding:12px 24px;
+ border-radius:8px;
  color:white;
  cursor:pointer;
  box-shadow:0 0 10px rgba(45,140,255,0.6);
  transition:0.2s;
+ font-weight: bold;
 }
 
 button:hover {
@@ -162,9 +169,9 @@ button:hover {
  transform:scale(1.05);
 }
 
-
-button:hover {
-  opacity: 0.9;
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 </style>
@@ -183,7 +190,7 @@ button:hover {
 <div class="main">
 
   <div class="header">
-    <img src="logo-icon.png" class="logo">
+    <img src="logo-icon.png" class="logo" alt="Logo">
     <div class="brand">HYMENOPTERA</div>
   </div>
 
@@ -191,7 +198,7 @@ button:hover {
 
   <div class="input-area">
     <input id="userInput" placeholder="Send a message...">
-    <button onclick="sendMessage()">Send</button>
+    <button id="sendBtn" onclick="sendMessage()">Send</button>
   </div>
 
 </div>
@@ -201,71 +208,8 @@ button:hover {
 let conversation = [];
 
 const chat = document.getElementById("chat");
-
-function addMessage(content, role) {
-  const div = document.createElement("div");
-  div.classList.add("message", role);
-  div.innerText = content;
-  chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
-}
-
-async function sendMessage() {
-  const div = document.createElement("div");
-  div.classList.add("message","assistant");
-  chat.appendChild(div);
-
-  let i = 0;
-
-  function typing() {
-    if (i < text.length) {
-      div.textContent += text.charAt(i);
-      i++;
-      setTimeout(typing, 20);
-    }
-  }
-
-  typing();
-}
-  const input = document.getElementById("userInput");
-  const message = input.value.trim();
-  if (!message) return;
-
-  addMessage(message, "user");
-
-  conversation.push({
-    role: "user",
-    content: message
-  });
-
-  input.value = "";
-
-  addMessage("Thinking...", "assistant");
-
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: conversation })
-  });
-
-  const data = await res.json();
-
-  chat.lastChild.remove();
-
-  conversation.push({
-    role: "assistant",
-    content: data.reply
-  });
-
-  typeMessage(data.reply);
-}
-
-<script>
-
-let conversation = [];
-
-const chat = document.getElementById("chat");
 const input = document.getElementById("userInput");
+const sendBtn = document.getElementById("sendBtn");
 
 function addMessage(content, role) {
   const div = document.createElement("div");
@@ -294,16 +238,20 @@ function typeMessage(text) {
 }
 
 input.addEventListener("keydown", function(e) {
-  if (e.key === "Enter") {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
     sendMessage();
   }
 });
 
 async function sendMessage() {
-
   const message = input.value.trim();
 
   if (!message) return;
+
+  // Disable button while sending
+  sendBtn.disabled = true;
+  input.disabled = true;
 
   addMessage(message, "user");
 
@@ -316,26 +264,46 @@ async function sendMessage() {
 
   addMessage("Thinking...", "assistant");
 
-  const res = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      messages: conversation
-    })
-  });
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messages: conversation
+      })
+    });
 
-  const data = await res.json();
+    const data = await res.json();
 
-  chat.lastChild.remove();
+    if (!res.ok) {
+      chat.lastChild.remove();
+      addMessage(`Error: ${data.error || data.reply || "Failed to get response"}`, "assistant");
+      return;
+    }
 
-  conversation.push({
-    role: "assistant",
-    content: data.reply
-  });
+    chat.lastChild.remove();
 
-  typeMessage(data.reply);
+    const reply = data.reply || "No response received";
+
+    conversation.push({
+      role: "assistant",
+      content: reply
+    });
+
+    typeMessage(reply);
+
+  } catch (error) {
+    console.error("Error:", error);
+    chat.lastChild.remove();
+    addMessage(`Error: ${error.message}`, "assistant");
+  } finally {
+    // Re-enable button
+    sendBtn.disabled = false;
+    input.disabled = false;
+    input.focus();
+  }
 }
 
 </script>
