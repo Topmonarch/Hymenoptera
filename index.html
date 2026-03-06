@@ -12,33 +12,116 @@
   --accent-glow: rgba(45,140,255,0.6);
 }
 
+*{
+  box-sizing: border-box;
+}
+
 body{
 background:#0b0f14;
 color:white;
 font-family:Arial;
 margin:0;
+height:100vh;
+overflow:hidden;
 }
 
-header{
-text-align:center;
-padding:15px;
-border-bottom:1px solid #222;
+/* App layout: sidebar + main side by side */
+.app{
+  display:flex;
+  height:100vh;
 }
 
-.logo{
-height:40px;
+/* Sidebar */
+.sidebar{
+  width:220px;
+  min-width:220px;
+  background:#0d1117;
+  border-right:1px solid #1e2430;
+  display:flex;
+  flex-direction:column;
+  padding:16px;
+  gap:10px;
+}
+
+.new-chat{
+  width:100%;
+  text-align:left;
+  background:#1a2336;
+  border-radius:6px;
+}
+
+/* Main content area */
+.main{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+/* Header bar inside main (chat screen) */
+.header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 20px;
+  border-bottom:1px solid #1e2430;
+  flex-shrink:0;
+}
+
+.center-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.logo-img{
+  height:36px;
+  width:36px;
+  object-fit:contain;
+  border-radius:6px;
+}
+
+.user-area{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+.user-email{
+  color:#aaa;
+  font-size:13px;
+}
+
+/* General button styles */
+button{
+padding:10px 16px;
+background:#1976d2;
+border:none;
+color:white;
+cursor:pointer;
+border-radius:4px;
+}
+
+.btn{
+  background:#1a2336;
+  border-radius:6px;
+  font-size:13px;
+  padding:8px 14px;
+}
+
+.hidden{
+  display:none !important;
 }
 
 /* Title styling: visible color is the exact blue accent */
 .title{
   font-weight:800;
   letter-spacing:4px;
-  color: var(--accent-color); /* visible text color: exact blue */
+  color: var(--accent-color);
   margin:0;
 }
 
 /* Glow effect (applies to text and buttons) */
-/* Keeps the glow in the blue accent while the title text itself is blue */
 .glow {
   text-shadow:
     0 0 6px rgba(255,255,255,0.05),
@@ -73,53 +156,96 @@ height:40px;
   }
 }
 
-#chat-screen{
-display:none;
-flex-direction:column;
-height:100vh;
+/* Login screen */
+#login-screen{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  flex:1;
 }
 
-#messages{
-flex:1;
-overflow:auto;
-padding:20px;
+.login-box{
+  background:#111;
+  padding:30px;
+  border-radius:10px;
+  width:320px;
+}
+
+.login-box h3{
+  margin-top:0;
+  color: var(--accent-color);
+  letter-spacing:2px;
+}
+
+.login-box input{
+  width:100%;
+  padding:10px;
+  background:#1a2336;
+  color:white;
+  border:1px solid #2a3550;
+  border-radius:6px;
+  margin-bottom:10px;
+  font-size:14px;
+}
+
+.login-box button{
+  width:100%;
+  margin-bottom:8px;
+}
+
+.login-box .guest-btn{
+  background:#1a2336;
+  border:1px solid #2a3550;
+}
+
+/* Chat screen */
+#chat-screen{
+  display:none;
+  flex-direction:column;
+  flex:1;
+  overflow:hidden;
+}
+
+/* Chat messages container */
+#chat{
+  flex:1;
+  overflow-y:auto;
+  padding:20px;
 }
 
 .message{
-margin:10px 0;
+  margin:10px 0;
+  line-height:1.5;
 }
 
 .user{
-color:#4fc3f7;
+  color:#4fc3f7;
 }
 
-.bot{
-color:#90ee90;
+.assistant{
+  color:#90ee90;
 }
 
-#input-area{
-display:flex;
-border-top:1px solid #333;
+/* Input area */
+.input-area{
+  display:flex;
+  border-top:1px solid #1e2430;
+  padding:10px;
+  gap:8px;
+  flex-shrink:0;
 }
 
-#message-input{
-flex:1;
-padding:12px;
-background:#111;
-color:white;
-border:none;
+.input-area input{
+  flex:1;
+  padding:10px 14px;
+  background:#111;
+  color:white;
+  border:1px solid #2a3550;
+  border-radius:6px;
+  font-size:14px;
 }
 
-/* General button styles */
-button{
-padding:12px;
-background:#1976d2;
-border:none;
-color:white; /* button text visible color is white */
-cursor:pointer;
-}
-
-/* Specific styles for the send button so only it glows with the accent */
+/* Specific styles for the send button */
 .send-btn{
   background: linear-gradient(180deg, var(--accent-color), #175fb8);
   border-radius: 6px;
@@ -128,8 +254,9 @@ cursor:pointer;
     0 0 12px rgba(45,140,255,0.18);
   border: 1px solid rgba(255,255,255,0.04);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
-  color: white; /* ensure the send button's text is white */
+  color: white;
   font-weight:600;
+  padding:10px 20px;
 }
 
 /* stronger glow when .glow class is present on the send button */
@@ -149,218 +276,75 @@ cursor:pointer;
   box-shadow: 0 4px 12px rgba(0,0,0,0.45);
 }
 
-#login-screen{
-display:flex;
-justify-content:center;
-align-items:center;
-height:100vh;
-}
-
-.login-box{
-background:#111;
-padding:30px;
-border-radius:10px;
-width:300px;
-}
-
 </style>
 
 </head>
 
 <body>
 
-  <!-- Sidebar -->
-  <div class="sidebar">
-    <img src="hymenoptera_logo_transparent.png" alt="Hymenoptera" style="height:44px;width:44px;object-fit:contain;border-radius:8px;" />
-    <div style="font-weight:800;color:#2D8CFF;letter-spacing:2px;">Hymenoptera</div>
-    <button id="newChatBtn" class="new-chat">New Chat</button>
-    <div style="color:#777;font-size:13px;margin-top:4px;">
-      Start a new conversation or continue chatting.
-    </div>
-    <!-- Spacer pushes Settings to the bottom -->
-    <div style="flex:1;"></div>
-    <button id="sidebarSettingsBtn" class="btn" style="width:100%;text-align:left;">⚙ Settings</button>
-  </div>
+  <div class="app">
 
-  <!-- Main area -->
-  <div class="main">
-    <div class="header">
-      <!-- Centered logo above the title -->
-      <div class="center-brand" aria-hidden="false">
-        <img src="hymenoptera_logo_transparent.png" alt="Hymenoptera logo" class="logo-img" />
-        <div class="title">HYMENOPTERA</div>
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <img src="hymenoptera_logo_transparent.png" alt="Hymenoptera" style="height:44px;width:44px;object-fit:contain;border-radius:8px;" />
+      <div style="font-weight:800;color:#2D8CFF;letter-spacing:2px;">Hymenoptera</div>
+      <button id="newChatBtn" class="new-chat">New Chat</button>
+      <div style="color:#777;font-size:13px;margin-top:4px;">
+        Start a new conversation or continue chatting.
       </div>
-
-      <!-- User area aligned to the right -->
-      <div class="user-area" id="userArea">
-        <div id="displayEmail" class="user-email hidden"></div>
-        <button id="settingsBtn" class="btn hidden">Settings</button>
-        <button id="logoutBtn" class="btn hidden">Logout</button>
-      </div>
+      <!-- Spacer pushes Settings to the bottom -->
+      <div style="flex:1;"></div>
+      <button id="sidebarSettingsBtn" class="btn" style="width:100%;text-align:left;">⚙ Settings</button>
     </div>
 
-    <!-- Chat messages container -->
-    <div id="chat" aria-live="polite"></div>
+    <!-- Main area -->
+    <div class="main">
 
-    <!-- Input area -->
-    <div class="input-area">
-      <input type="text" id="userInput" placeholder="Ask something..." />
-      <button id="sendBtn" class="send-btn">Send</button>
-    </div>
-  </div>
-
-  <!-- AUTH PANEL (shows before chat when not logged in) -->
-  <div id="authPanel" class="auth-panel hidden" role="dialog" aria-modal="true">
-    <div class="auth-card">
-      <!-- Sign In form -->
-      <div id="signInBox">
-        <h2>Sign In</h2>
-        <form id="signInForm">
-          <div class="form-group">
-            <label for="signinEmail">Email</label>
-            <input id="signinEmail" type="email" required />
-          </div>
-          <div class="form-group">
-            <label for="signinPassword">Password</label>
-            <input id="signinPassword" type="password" required />
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn primary">Sign In</button>
-            <div class="form-toggle" id="showSignup">Create an account →</div>
-          </div>
-
-          <!-- Continue as Guest -->
-          <button type="button" id="continueGuestBtn" class="guest-btn">Continue as Guest</button>
-          <div class="guest-note">Guest sessions are temporary and chat history will not be saved.</div>
-
-          <div id="signinError" style="color:#ff8b8b;margin-top:8px;"></div>
-        </form>
+      <!-- Login Screen -->
+      <div id="login-screen">
+        <div class="login-box">
+          <h3>Sign In</h3>
+          <input id="email" type="email" placeholder="Email" />
+          <input id="password" type="password" placeholder="Password" />
+          <button onclick="signIn()">Sign In</button>
+          <button onclick="continueAsGuest()" class="guest-btn">Continue as Guest</button>
+        </div>
       </div>
 
-      <!-- Sign Up form -->
-      <div id="signUpBox" class="hidden">
-        <h2>Create Account</h2>
-        <form id="signUpForm">
-          <div class="form-group">
-            <label for="signupEmail">Email</label>
-            <input id="signupEmail" type="email" required />
+      <!-- Chat Screen -->
+      <div id="chat-screen">
+        <div class="header">
+          <!-- Centered logo above the title -->
+          <div class="center-brand">
+            <img src="hymenoptera_logo_transparent.png" alt="Hymenoptera logo" class="logo-img" />
+            <div class="title glow">HYMENOPTERA</div>
           </div>
-          <div class="form-group">
-            <label for="signupPassword">Password</label>
-            <input id="signupPassword" type="password" required />
+
+          <!-- User area aligned to the right -->
+          <div class="user-area" id="userArea">
+            <div id="displayEmail" class="user-email hidden"></div>
+            <button id="settingsBtn" class="btn hidden">Settings</button>
+            <button id="logoutBtn" class="btn hidden">Logout</button>
           </div>
-          <div class="form-group">
-            <label for="signupConfirm">Confirm Password</label>
-            <input id="signupConfirm" type="password" required />
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn primary">Sign Up</button>
-            <div class="form-toggle" id="showSignin">Have an account? Sign in →</div>
-          </div>
-          <div id="signupError" style="color:#ff8b8b;margin-top:8px;"></div>
-        </form>
+        </div>
+
+        <!-- Chat messages container -->
+        <div id="chat" aria-live="polite"></div>
+
+        <!-- Input area -->
+        <div class="input-area">
+          <input type="text" id="userInput" placeholder="Ask something..." />
+          <button id="sendBtn" class="send-btn glow">Send</button>
+        </div>
       </div>
-    </div>
-  </div>
+
+    </div><!-- /.main -->
+
+  </div><!-- /.app -->
 
   <!-- Scripts: auth first so chat.js can check session/capabilities -->
   <script src="auth.js"></script>
   <script src="chat.js"></script>
 
-<header>
-<img src="hymenoptera_logo_transparent.png" class="logo" alt="Hymenoptera logo">
-<h2 class="title glow">HYMENOPTERA</h2>
-</header>
-
-
-<div id="login-screen">
-
-<div class="login-box">
-
-<h3>Sign In</h3>
-
-<input id="email" placeholder="Email"><br><br>
-<input id="password" type="password" placeholder="Password"><br><br>
-
-<button onclick="signIn()">Sign In</button>
-
-<br><br>
-
-<button onclick="continueAsGuest()">Continue as Guest</button>
-
-</div>
-
-</div>
-
-
-<div id="chat-screen">
-
-<div id="messages"></div>
-
-<div id="input-area">
-
-<input id="message-input" placeholder="Ask something...">
-
-<!-- send button text is white, glow remains blue -->
-<button onclick="sendMessage()" class="send-btn glow">Send</button>
-
-</div>
-
-</div>
-
-
-<script src="auth.js"></script>
-
-<script>
-
-async function sendMessage(){
-
-const input = document.getElementById("message-input");
-
-const message = input.value;
-
-if(!message) return;
-
-addMessage("user",message);
-
-input.value="";
-
-const response = await fetch("/api/chat",{
-
-method:"POST",
-
-headers:{
-"Content-Type":"application/json"
-},
-
-body:JSON.stringify({message})
-
-});
-
-const data = await response.json();
-
-addMessage("bot",data.reply);
-
-}
-
-function addMessage(type,text){
-
-const container = document.getElementById("messages");
-
-const div = document.createElement("div");
-
-div.className = "message "+type;
-
-div.innerText = text;
-
-container.appendChild(div);
-
-container.scrollTop = container.scrollHeight;
-
-}
-
-</script>
-
-  
 </body>
 </html>
