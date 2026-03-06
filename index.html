@@ -674,6 +674,38 @@ setAccountDisplay();
       display: none;
       flex-direction: column;
       height: 100%;
+      position: relative;
+    }
+
+    /* Empty-state: centered overlay shown when no messages exist */
+    .empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      user-select: none;
+      z-index: 1;
+    }
+
+    .empty-state.hidden {
+      display: none;
+    }
+
+    .empty-state-logo {
+      height: 80px;
+      opacity: 0.35;
+    }
+
+    .empty-state-title {
+      margin-top: 14px;
+      font-weight: 800;
+      letter-spacing: 4px;
+      font-size: 15px;
+      color: var(--accent-color);
+      opacity: 0.45;
     }
 
     #messages {
@@ -854,18 +886,28 @@ setAccountDisplay();
 
     <!-- Chat Screen -->
     <div id="chat-screen">
+
+      <!-- Empty state: shown when no messages, hidden on first send, restored on New Chat -->
+      <div id="empty-state" class="empty-state">
+        <img src="hymenoptera_logo_transparent.png" alt="Hymenoptera" class="empty-state-logo" />
+        <div class="empty-state-title">HYMENOPTERA</div>
+      </div>
+
       <div id="messages"></div>
+
       <div id="input-area">
         <input id="message-input" placeholder="Ask something..."
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}" />
         <!-- send button text is white, glow remains blue -->
         <button class="send-btn glow" onclick="sendMessage()">Send</button>
       </div>
+
     </div>
 
   </div>
 
   <script src="auth.js"></script>
+  <script src="chat.js"></script>
 
   <script>
     function switchTab(tab) {
@@ -875,63 +917,12 @@ setAccountDisplay();
       document.getElementById('section-signup').classList.toggle('active', tab === 'signup');
     }
 
-    // Accumulate conversation history for multi-turn context
-    var conversationHistory = [];
-
     function newChat() {
       var user = localStorage.getItem('hymenoptera_user');
       if (!user) return;
       document.getElementById('messages').innerHTML = '';
-      conversationHistory = [];
-    }
-
-    async function sendMessage() {
-      var input = document.getElementById('message-input');
-      var message = (input.value || '').trim();
-      if (!message) return;
-
-      addMessage('user', message);
-      conversationHistory.push({ role: 'user', content: message });
-      input.value = '';
-
-      try {
-        var response = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: conversationHistory })
-        });
-
-        var data;
-        try {
-          data = await response.json();
-        } catch (e) {
-          addMessage('assistant', 'Error: Invalid response from server.');
-          return;
-        }
-
-        if (!response.ok) {
-          var errMsg = (data && data.error)
-            ? (data.error.message || JSON.stringify(data.error))
-            : 'Server error';
-          addMessage('assistant', 'Error: ' + errMsg);
-          return;
-        }
-
-        var reply = data.reply || JSON.stringify(data);
-        addMessage('assistant', reply);
-        conversationHistory.push({ role: 'assistant', content: reply });
-      } catch (err) {
-        addMessage('assistant', 'Network error: ' + String(err));
-      }
-    }
-
-    function addMessage(type, text) {
-      var container = document.getElementById('messages');
-      var div = document.createElement('div');
-      div.className = 'message ' + type;
-      div.textContent = text;
-      container.appendChild(div);
-      container.scrollTop = container.scrollHeight;
+      var emptyState = document.getElementById('empty-state');
+      if (emptyState) emptyState.classList.remove('hidden');
     }
   </script>
   

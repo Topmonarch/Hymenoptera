@@ -1,6 +1,9 @@
 // chat.js
 // Frontend chat handler: POST to /api/chat, read data.reply, manage empty-state.
 
+// Preserves hymAuth checks and saveMessageToHistory behavior.
+
+
 (function () {
   'use strict';
 
@@ -20,6 +23,30 @@
     }
   }
 
+
+  // Save a message to local history only if allowed (logged-in, non-guest users)
+  function saveMessageToHistory(msg) {
+    try {
+      if (window.hymAuth) {
+        // If hymAuth is present, respect its canSaveHistory gate
+        if (!window.hymAuth.canSaveHistory || !window.hymAuth.canSaveHistory()) return;
+      } else {
+        // Fallback: only save for authenticated (non-guest) users
+        var user = localStorage.getItem('hymenoptera_user');
+        if (!user || user === 'guest') return;
+      }
+      var key = 'hym_messages';
+      var raw = localStorage.getItem(key);
+      var arr = raw ? JSON.parse(raw) : [];
+      arr.push(msg);
+      localStorage.setItem(key, JSON.stringify(arr));
+    } catch (e) {
+      console.warn('saveMessageToHistory error', e);
+    }
+  }
+
+
+
   function addMessage(type, text) {
     if (!messagesEl) return;
     hideEmptyState();
@@ -28,7 +55,11 @@
     div.innerText = text;
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    if (type === 'assistant' && messageInput) {
+
     if (type === 'bot' && messageInput) {
+
       messageInput.focus();
     }
   }
@@ -42,7 +73,14 @@
     if (!message) return;
 
     addMessage('user', message);
+
+    saveMessageToHistory({ role: 'user', content: message });
     messageInput.value = '';
+
+    // Send only the current user message; api/chat reads the last message from the array.
+
+    messageInput.value = '';
+
 
     var payload = {
       messages: [{ role: 'user', content: message }]
@@ -59,23 +97,43 @@
       try {
         data = await response.json();
       } catch (e) {
+
+        addMessage('assistant', 'Error: Invalid response from server.');
+
         addMessage('bot', 'Error: Invalid response from server.');
+
         return;
       }
 
       if (!response.ok) {
+
+        var errMsg = (data && data.error)
+          ? (data.error.message || JSON.stringify(data.error))
+          : 'Server error';
+        addMessage('assistant', 'Error: ' + errMsg);
+
         var errMsg = (data && data.error && data.error.message)
           ? data.error.message
           : 'Server error';
         addMessage('bot', 'Error: ' + errMsg);
+
         return;
       }
 
       // api/chat always returns { reply: assistantText }
+
+      var reply = data.reply || 'No response received from server';
+      addMessage('assistant', reply);
+      saveMessageToHistory({ role: 'assistant', content: reply });
+    } catch (err) {
+      console.error('sendMessage error:', err);
+      addMessage('assistant', 'Network error');
+
       addMessage('bot', data.reply || 'No reply');
     } catch (err) {
       console.error('sendMessage error:', err);
       addMessage('bot', 'Network error');
+
     }
   }
 
