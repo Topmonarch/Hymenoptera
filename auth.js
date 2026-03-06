@@ -1,183 +1,37 @@
-// auth.js
-// Extended frontend authentication logic with "Continue as Guest" support.
-// - Sign In / Sign Up with localStorage-based temporary accounts
-// - Continue as Guest creates a temporary guest session (no history saving)
-// - Exposes window.hymAuth with helpers: isLoggedIn, isGuest, currentUser, canSaveHistory, requireAuth
+function continueAsGuest() {
 
-(function () {
-  // DOM elements
-  const authPanel = document.getElementById('authPanel');
-  const signInBox = document.getElementById('signInBox');
-  const signUpBox = document.getElementById('signUpBox');
-  const showSignup = document.getElementById('showSignup');
-  const showSignin = document.getElementById('showSignin');
+  localStorage.setItem("hymenoptera_user", "guest");
 
-  const signInForm = document.getElementById('signInForm');
-  const signUpForm = document.getElementById('signUpForm');
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("chat-screen").style.display = "flex";
 
-  const signinEmail = document.getElementById('signinEmail');
-  const signinPassword = document.getElementById('signinPassword');
-  const signupEmail = document.getElementById('signupEmail');
-  const signupPassword = document.getElementById('signupPassword');
-  const signupConfirm = document.getElementById('signupConfirm');
+}
 
-  const signinError = document.getElementById('signinError');
-  const signupError = document.getElementById('signupError');
+function signIn() {
 
-  const continueGuestBtn = document.getElementById('continueGuestBtn');
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
 
-  const displayEmail = document.getElementById('displayEmail');
-  const settingsBtn = document.getElementById('settingsBtn');
-  const logoutBtn = document.getElementById('logoutBtn');
-
-  const userInput = document.getElementById('userInput');
-  const sendBtn = document.getElementById('sendBtn');
-  const chatContainer = document.getElementById('chat');
-  const newChatBtn = document.getElementById('newChatBtn');
-
-  // storage keys
-  const USERS_KEY = 'hym_users';
-  const SESSION_KEY = 'hym_session';
-
-  // Helpers to manage simple users store
-  function loadUsers() {
-    try {
-      const raw = localStorage.getItem(USERS_KEY);
-      return raw ? JSON.parse(raw) : {};
-    } catch (e) {
-      return {};
-    }
-  }
-  function saveUsers(users) {
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  if (!email || !password) {
+    alert("Enter email and password");
+    return;
   }
 
-  // Session management
-  function setSession(email, opts = {}) {
-    // opts.guest = boolean
-    const session = { email: email || null, guest: !!opts.guest, createdAt: Date.now() };
-    // For guest sessions, we still persist in localStorage so page reload keeps temporary session.
-    // They are intended to be temporary; logout will clear them.
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  }
-  function setGuestSessionTemporary() {
-    // Create a guest session with email "Guest User"
-    setSession('Guest User', { guest: true });
-  }
-  function clearSession() {
-    localStorage.removeItem(SESSION_KEY);
-  }
-  function getSession() {
-    try {
-      const raw = localStorage.getItem(SESSION_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (e) {
-      return null;
-    }
-  }
+  localStorage.setItem("hymenoptera_user", email);
 
-  // UI helpers
-  function showAuthPanel(show, mode = 'signin') {
-    if (show) {
-      authPanel.classList.remove('hidden');
-      if (mode === 'signin') {
-        signInBox.classList.remove('hidden');
-        signUpBox.classList.add('hidden');
-      } else {
-        signUpBox.classList.remove('hidden');
-        signInBox.classList.add('hidden');
-      }
-    } else {
-      authPanel.classList.add('hidden');
-    }
-  }
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("chat-screen").style.display = "flex";
 
-  function updateUIForAuth() {
-    const session = getSession();
-    if (session && (session.email || session.guest)) {
-      // logged in (or guest)
-      const isGuest = !!session.guest;
-      displayEmail.textContent = session.email || (isGuest ? 'Guest User' : '');
-      displayEmail.classList.remove('hidden');
+}
 
-      // Settings only for fully authenticated users (not guest)
-      if (!isGuest) {
-        settingsBtn.classList.remove('hidden');
-      } else {
-        settingsBtn.classList.add('hidden');
-      }
-      logoutBtn.classList.remove('hidden');
+window.onload = function () {
 
-      // Hide auth panel and enable chat input
-      showAuthPanel(false);
-      userInput.disabled = false;
-      sendBtn.disabled = false;
-      newChatBtn.disabled = false;
+  const user = localStorage.getItem("hymenoptera_user");
 
-      // For guest sessions, show a mild notice (placed in chat)
-      if (!chatContainer.querySelector('.message')) {
-        const el = document.createElement('div');
-        el.className = 'message assistant';
-        if (isGuest) {
-          el.textContent = `You're signed in as a Guest. Chat history will not be saved.`;
-        } else {
-          el.textContent = `Welcome back, ${session.email}! Ask me anything.`;
-        }
-        chatContainer.appendChild(el);
-      }
-    } else {
-      // logged out
-      displayEmail.classList.add('hidden');
-      settingsBtn.classList.add('hidden');
-      logoutBtn.classList.add('hidden');
+  if (user) {
 
-      // Show auth panel and disable chat input
-      showAuthPanel(true, 'signin');
-      userInput.disabled = true;
-      sendBtn.disabled = true;
-      newChatBtn.disabled = true;
-    }
-  }
-
-  // Event handlers
-  signUpForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-    signupError.textContent = '';
-
-    const email = (signupEmail.value || '').trim().toLowerCase();
-    const password = signupPassword.value || '';
-    const confirm = signupConfirm.value || '';
-
-    if (!email || !password) {
-      signupError.textContent = 'Please enter email and password.';
-      return;
-    }
-    if (password.length < 6) {
-      signupError.textContent = 'Password must be at least 6 characters.';
-      return;
-    }
-    if (password !== confirm) {
-      signupError.textContent = 'Passwords do not match.';
-      return;
-    }
-
-    const users = loadUsers();
-    if (users[email]) {
-      signupError.textContent = 'An account with that email already exists. Please sign in.';
-      return;
-    }
-
-    // NOTE: This is temporary local-only storage. Do NOT use for production.
-    users[email] = {
-      password: password // plain text for demo; in production hash + server storage required
-    };
-    saveUsers(users);
-
-    // Create session and update UI
-    setSession(email, { guest: false });
-    signupEmail.value = signupPassword.value = signupConfirm.value = '';
-    updateUIForAuth();
-  });
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("chat-screen").style.display = "flex";
 
   signInForm.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -278,39 +132,8 @@
 
   // Initialize UI based on session
   updateUIForAuth();
+=======
+  }
 
-  // Expose a small API for other scripts (e.g., chat.js) to query session and capabilities
-  window.hymAuth = {
-    isLoggedIn: function () {
-      const s = getSession();
-      return !!(s && !s.guest && s.email);
-    },
-    isGuest: function () {
-      const s = getSession();
-      return !!(s && s.guest);
-    },
-    currentUser: function () {
-      const s = getSession();
-      if (!s) return null;
-      // For guest sessions, return 'Guest User' string as requested.
-      return s.guest ? 'Guest User' : s.email;
-    },
-    canSaveHistory: function () {
-      const s = getSession();
-      // Only allow saving chat history for authenticated (non-guest) users
-      return !!(s && !s.guest && s.email);
-    },
-    requireAuth: function () {
-      const s = getSession();
-      if (!s) {
-        showAuthPanel(true, 'signin');
-        return false;
-      }
-      return true;
-    },
-    // helpers for programmatic sign out/sign in
-    signOut: function () { clearSession(); updateUIForAuth(); },
-    signInProgrammatic: function (email) { setSession(email, { guest: false }); updateUIForAuth(); },
-    continueAsGuest: function () { setGuestSessionTemporary(); updateUIForAuth(); }
-  };
-})();
+
+};
