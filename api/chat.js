@@ -1,181 +1,218 @@
-// chat.js
-// Handles sending messages to /api/chat for both guest and logged-in users.
-// Fixes:
-// - Send button triggers sendMessage()
-// - Pressing Enter sends the message
-// - POSTs { messages: [ { role: "user", content: messageText } ] } to /api/chat
-// - Displays assistant reply in the chat window
-// - Disables saving history for guest users (checks window.hymAuth.canSaveHistory())
+// chat.js - UI wiring for Hymenoptera chat and auth flow
+// Wired: Send button + Enter key => sendMessage()
+// Auth: Sign In, Sign Up, Continue as Guest => show chat UI
 
-(function () {
-  const userInput = document.getElementById('userInput');
-  const sendBtn = document.getElementById('sendBtn');
-  const chatContainer = document.getElementById('chat');
+let currentUser = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Elements
+  const authOverlay = document.getElementById('authOverlay');
+  const signInForm = document.getElementById('signInForm');
+  const signUpForm = document.getElementById('signUpForm');
+  const tabSignIn = document.getElementById('tabSignIn');
+  const tabSignUp = document.getElementById('tabSignUp');
+  const signInBtn = document.getElementById('signInBtn');
+  const signUpBtn = document.getElementById('signUpBtn');
+  const guestBtn = document.getElementById('guestBtn');
+  const closeAuth = document.getElementById('closeAuth');
+
+  const chatContainer = document.getElementById('chatContainer');
+  const welcomeContainer = document.getElementById('welcomeContainer');
   const newChatBtn = document.getElementById('newChatBtn');
+  const messages = document.getElementById('messages');
+  const messageInput = document.getElementById('messageInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const messageForm = document.getElementById('messageForm');
 
-  if (!userInput || !sendBtn || !chatContainer) {
-    console.error('chat.js: missing required DOM elements.');
-    return;
-  }
-
-  // Append a message to the chat UI
-  function appendMessage(role, text) {
-    const el = document.createElement('div');
-    el.className = 'message ' + (role === 'user' ? 'user' : 'assistant');
-    // Keep newline-friendly text rendering
-    el.textContent = text;
-    chatContainer.appendChild(el);
-    // Scroll to bottom
-    chatContainer.scrollTop = chatContainer.scrollHeight;
-  }
-
-  // Save a message to local history only if allowed
-  function saveMessageToHistory(msg) {
-    try {
-      if (!window.hymAuth || !window.hymAuth.canSaveHistory || !window.hymAuth.canSaveHistory()) {
-        // Do not save if no auth helper or if guest mode
-        return;
-      }
-      const key = 'hym_messages';
-      const raw = localStorage.getItem(key);
-      const arr = raw ? JSON.parse(raw) : [];
-      arr.push(msg);
-      localStorage.setItem(key, JSON.stringify(arr));
-    } catch (e) {
-      // Ignore storage errors to avoid breaking chat flow
-      console.warn('saveMessageToHistory error', e);
-    }
-  }
-
-  // Ensure there is a session (logged in or guest). If none, prompt for auth.
-  function ensureSessionOrPrompt() {
-    if (window.hymAuth) {
-      const loggedIn = window.hymAuth.isLoggedIn && window.hymAuth.isLoggedIn();
-      const guest = window.hymAuth.isGuest && window.hymAuth.isGuest();
-      if (loggedIn || guest) return true;
-      // show auth
-      if (window.hymAuth.requireAuth) window.hymAuth.requireAuth();
-      return false;
-    }
-    // If hymAuth is not available, allow sending but warn
-    return true;
-  }
-
-  // Send message to /api/chat
-  async function sendMessage() {
-    const text = (userInput.value || '').trim();
-    if (!text) return;
-
-    // Ensure user has a session (either authenticated or guest)
-    if (!ensureSessionOrPrompt()) return;
-
-    // Append user message locally
-    appendMessage('user', text);
-
-    // Save user message conditionally
-    saveMessageToHistory({ role: 'user', content: text });
-
-    // Clear input and disable controls while sending
-    userInput.value = '';
-    sendBtn.disabled = true;
-    userInput.disabled = true;
-
-    try {
-      const payload = {
-        messages: [
-          { role: 'user', content: text }
-        ]
-      };
-
-      const resp = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      let data;
-      try {
-        data = await resp.json();
-      } catch (e) {
-        // Non-JSON response
-        appendMessage('assistant', 'Error: Invalid response from server.');
-        return;
-      }
-
-      if (!resp.ok) {
-        // If the server returned an error shape, try to show it
-        const errMsg = (data && data.error) ? (data.error.message || JSON.stringify(data.error)) : 'Server error';
-        appendMessage('assistant', `Error: ${errMsg}`);
-        return;
-      }
-
-      // The backend returns { reply: assistantMessage }
-      const assistantText = (data && (data.reply || data.output_text)) ? (data.reply || data.output_text) : JSON.stringify(data);
-      appendMessage('assistant', assistantText);
-
-      // Save assistant reply conditionally
-      saveMessageToHistory({ role: 'assistant', content: assistantText });
-    } catch (err) {
-      appendMessage('assistant', 'Network error: ' + String(err));
-    } finally {
-      // Re-enable controls
-      sendBtn.disabled = false;
-      userInput.disabled = false;
-      userInput.focus();
-    }
-  }
-
-  // Wire up the send button
-  sendBtn.addEventListener('click', function (e) {
-    e.preventDefault();
-    sendMessage();
+  // Tab switching
+  tabSignIn.addEventListener('click', () => {
+    tabSignIn.classList.add('active');
+    tabSignUp.classList.remove('active');
+    signInForm.classList.remove('hidden');
+    signUpForm.classList.add('hidden');
   });
 
-  // Enter key sends message (Shift+Enter allows newline)
-  userInput.addEventListener('keydown', function (e) {
+  tabSignUp.addEventListener('click', () => {
+    tabSignUp.classList.add('active');
+    tabSignIn.classList.remove('active');
+    signUpForm.classList.remove('hidden');
+    signInForm.classList.add('hidden');
+  });
+
+  // Auth actions
+  signInBtn.addEventListener('click', signIn);
+  signUpBtn.addEventListener('click', signUp);
+  guestBtn.addEventListener('click', continueAsGuest);
+
+  closeAuth.addEventListener('click', () => {
+    // Close overlay but keep chat hidden if no auth
+    authOverlay.classList.add('hidden');
+  });
+
+  // Chat actions
+  sendBtn.addEventListener('click', sendMessage);
+
+  // Enter key sends message; Shift+Enter adds newline
+  messageInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
   });
 
-  // New Chat button clears the chat (only if session present)
-  if (newChatBtn) {
-    newChatBtn.addEventListener('click', function () {
-      if (!ensureSessionOrPrompt()) return;
-      // Clear the chat UI but do not persist for guest users
-      chatContainer.innerHTML = '';
-    });
+  messageForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    sendMessage();
+  });
+
+  newChatBtn.addEventListener('click', () => {
+    clearMessages();
+    appendSystemMessage('New chat started.');
+    messageInput.focus();
+  });
+
+  // Show auth overlay on load
+  showAuthOverlay();
+});
+
+/* UI control functions */
+
+function showAuthOverlay() {
+  const overlay = document.getElementById('authOverlay');
+  if (overlay) overlay.classList.remove('hidden');
+  hideChatUI();
+}
+
+function hideAuthOverlay() {
+  const overlay = document.getElementById('authOverlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+function showChatUI() {
+  hideAuthOverlay();
+  const chatContainer = document.getElementById('chatContainer');
+  const welcomeContainer = document.getElementById('welcomeContainer');
+  if (chatContainer) chatContainer.classList.remove('hidden');
+  if (welcomeContainer) welcomeContainer.classList.add('hidden');
+
+  const input = document.getElementById('messageInput');
+  if (input) input.focus();
+
+  const messages = document.getElementById('messages');
+  if (messages && messages.children.length === 0) {
+    appendSystemMessage('You are now connected. Say hello!');
+  }
+}
+
+function hideChatUI() {
+  const chatContainer = document.getElementById('chatContainer');
+  const welcomeContainer = document.getElementById('welcomeContainer');
+  if (chatContainer) chatContainer.classList.add('hidden');
+  if (welcomeContainer) welcomeContainer.classList.remove('hidden');
+}
+
+/* Simulated auth - replace with real backend calls */
+
+function signIn() {
+  const email = document.getElementById('signinEmail').value.trim();
+  const password = document.getElementById('signinPassword').value.trim();
+
+  if (!email || !password) {
+    alert('Please enter both email and password.');
+    return;
   }
 
-  // If page loads with a preexisting session (auth.js handles initial UI),
-  // enable or disable the input appropriately.
-  function refreshInputState() {
-    if (window.hymAuth) {
-      const loggedIn = window.hymAuth.isLoggedIn && window.hymAuth.isLoggedIn();
-      const guest = window.hymAuth.isGuest && window.hymAuth.isGuest();
-      if (loggedIn || guest) {
-        userInput.disabled = false;
-        sendBtn.disabled = false;
-      } else {
-        userInput.disabled = true;
-        sendBtn.disabled = true;
-      }
-    } else {
-      // If hymAuth isn't present, keep inputs enabled so chat can function.
-      userInput.disabled = false;
-      sendBtn.disabled = false;
-    }
+  // TODO: replace with real authentication
+  currentUser = { email, name: email.split('@')[0], guest: false };
+  appendSystemMessage(`Signed in as ${currentUser.email}`);
+  showChatUI();
+}
+
+function signUp() {
+  const name = document.getElementById('signupName').value.trim();
+  const email = document.getElementById('signupEmail').value.trim();
+  const password = document.getElementById('signupPassword').value.trim();
+
+  if (!name || !email || !password) {
+    alert('Please fill out all fields to create an account.');
+    return;
   }
 
-  // Run at startup
-  refreshInputState();
+  // TODO: replace with real account creation
+  currentUser = { email, name, guest: false };
+  appendSystemMessage(`Account created for ${currentUser.name}`);
+  showChatUI();
+}
 
-  // If hymAuth is available, listen for possible external session changes by polling a short interval
-  // (simple approach when no event system is provided).
-  if (window.hymAuth) {
-    setInterval(refreshInputState, 1000);
-  }
-})();
+function continueAsGuest() {
+  currentUser = { name: 'Guest', guest: true };
+  appendSystemMessage('Continuing as Guest');
+  showChatUI();
+}
+
+/* Chat messaging functions */
+
+function sendMessage() {
+  const input = document.getElementById('messageInput');
+  if (!input) return;
+  const text = input.value.replace(/\u00A0/g, ' ').trim();
+  if (!text) return;
+
+  appendUserMessage(text);
+  input.value = '';
+  input.focus();
+
+  // TODO: integrate with backend/AI message send here.
+  // Placeholder: simulated reply
+  simulateBotReply(text);
+}
+
+function appendUserMessage(text) {
+  appendMessage('You', text, 'user');
+}
+
+function appendSystemMessage(text) {
+  appendMessage('System', text, 'system');
+}
+
+function appendBotMessage(text) {
+  appendMessage('Hymenoptera', text, 'bot');
+}
+
+function appendMessage(sender, text, kind) {
+  const messages = document.getElementById('messages');
+  if (!messages) return;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = `message ${kind}`;
+
+  const meta = document.createElement('div');
+  meta.className = 'message-meta';
+  meta.textContent = sender;
+  wrapper.appendChild(meta);
+
+  const body = document.createElement('div');
+  body.className = 'message-body';
+  body.innerHTML = text.split('\n').map(escapeHtml).join('<br/>');
+  wrapper.appendChild(body);
+
+  messages.appendChild(wrapper);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function clearMessages() {
+  const messages = document.getElementById('messages');
+  if (messages) messages.innerHTML = '';
+}
+
+function simulateBotReply(userText) {
+  setTimeout(() => {
+    appendBotMessage(`(simulated reply) You said: "${userText}"`);
+  }, 700);
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, function (m) {
+    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m];
+  });
+}
