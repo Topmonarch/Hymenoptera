@@ -1,139 +1,156 @@
+// auth.js – session management and UI toggling for #login-screen / #chat-screen
+
+// ── Session helpers ──────────────────────────────────────────────────────────
+
+function getSession() {
+  try {
+    const raw = localStorage.getItem('hymenoptera_session');
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function setSession(email, opts) {
+  try {
+    localStorage.setItem('hymenoptera_session', JSON.stringify({
+      email: email,
+      guest: !!(opts && opts.guest)
+    }));
+    // legacy key kept for backwards compat
+    localStorage.setItem('hymenoptera_user', email);
+  } catch (e) { /* ignore */ }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem('hymenoptera_session');
+    localStorage.removeItem('hymenoptera_user');
+    const chatKeys = ['hym_messages', 'hym_conversations', 'hym_chat', 'chat_history', 'hym_last_chat'];
+    chatKeys.forEach(function (k) { localStorage.removeItem(k); });
+  } catch (e) { /* ignore */ }
+}
+
+// ── Expose hymAuth for chat.js ───────────────────────────────────────────────
+
+window.hymAuth = {
+  isLoggedIn: function () {
+    var s = getSession();
+    return !!(s && !s.guest);
+  },
+  isGuest: function () {
+    var s = getSession();
+    return !!(s && s.guest);
+  },
+  canSaveHistory: function () {
+    return window.hymAuth.isLoggedIn();
+  },
+  requireAuth: function () {
+    showLoginScreen();
+  }
+};
+
+// ── Screen helpers ───────────────────────────────────────────────────────────
+
+function showLoginScreen() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('chat-screen').style.display = 'none';
+}
+
+function showChatScreen() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('chat-screen').style.display = 'flex';
+
+  var s = getSession();
+  var emailEl = document.getElementById('displayEmail');
+  var logoutBtn = document.getElementById('logoutBtn');
+  var settingsBtn = document.getElementById('settingsBtn');
+
+  if (s) {
+    if (emailEl) {
+      emailEl.textContent = s.guest ? 'Guest' : s.email;
+      emailEl.classList.remove('hidden');
+    }
+    if (logoutBtn) logoutBtn.classList.remove('hidden');
+    if (settingsBtn) {
+      if (s.guest) {
+        settingsBtn.classList.add('hidden');
+      } else {
+        settingsBtn.classList.remove('hidden');
+      }
+    }
+  }
+}
+
+// ── Global auth functions (called by inline onclick in HTML) ─────────────────
+
 function continueAsGuest() {
-
-  localStorage.setItem("hymenoptera_user", "guest");
-
-  document.getElementById("login-screen").style.display = "none";
-  document.getElementById("chat-screen").style.display = "flex";
-
+  setSession('guest', { guest: true });
+  showChatScreen();
 }
 
 function signIn() {
-
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
+  var email = (document.getElementById('email').value || '').trim();
+  var password = document.getElementById('password').value || '';
 
   if (!email || !password) {
-    alert("Enter email and password");
+    alert('Enter email and password');
     return;
   }
 
-  localStorage.setItem("hymenoptera_user", email);
-
-  document.getElementById("login-screen").style.display = "none";
-  document.getElementById("chat-screen").style.display = "flex";
-
+  setSession(email, { guest: false });
+  showChatScreen();
 }
 
+// ── Initialise on page load ──────────────────────────────────────────────────
+
 window.onload = function () {
+  // Restore session if one exists
+  var session = getSession();
+  var legacyUser = localStorage.getItem('hymenoptera_user');
 
-  const user = localStorage.getItem("hymenoptera_user");
-
-  if (user) {
-
-    document.getElementById("login-screen").style.display = "none";
-    document.getElementById("chat-screen").style.display = "flex";
-
-  signInForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-    signinError.textContent = '';
-
-    const email = (signinEmail.value || '').trim().toLowerCase();
-    const password = signinPassword.value || '';
-
-    if (!email || !password) {
-      signinError.textContent = 'Please enter email and password.';
-      return;
-    }
-
-    const users = loadUsers();
-    if (!users[email] || users[email].password !== password) {
-      signinError.textContent = 'Invalid email or password.';
-      return;
-    }
-
-    // success
-    setSession(email, { guest: false });
-    signinEmail.value = signinPassword.value = '';
-    updateUIForAuth();
-  });
-
-  // Continue as Guest handler
-  continueGuestBtn.addEventListener('click', function () {
-    // Create a temporary guest session
-    setGuestSessionTemporary();
-
-    // Important: Ensure we disable any local saving that might have persisted from a previous logged-in user.
-    // Clear well-known local keys that might contain saved chat (best-effort; chat.js should check hymAuth.canSaveHistory())
-    try {
-      // Common keys that might be used by chat.js — remove to ensure guest does not inherit history.
-      const potentialKeys = ['hym_messages', 'hym_conversations', 'hym_chat', 'chat_history', 'hym_last_chat'];
-      potentialKeys.forEach((k) => {
-        if (localStorage.getItem(k)) localStorage.removeItem(k);
-      });
-    } catch (e) {
-      // ignore storage errors
-    }
-
-    updateUIForAuth();
-  });
-
-  showSignup.addEventListener('click', function () {
-    showAuthPanel(true, 'signup');
-    signinError.textContent = '';
-    signupError.textContent = '';
-  });
-  showSignin.addEventListener('click', function () {
-    showAuthPanel(true, 'signin');
-    signinError.textContent = '';
-    signupError.textContent = '';
-  });
-
-  logoutBtn.addEventListener('click', function () {
-    clearSession();
-
-    // If guest, nothing to persist; if regular user, you may want to clear local-only chat storage for privacy.
-    // We'll remove common chat keys for safety.
-    try {
-      const potentialKeys = ['hym_messages', 'hym_conversations', 'hym_chat', 'chat_history', 'hym_last_chat'];
-      potentialKeys.forEach((k) => {
-        if (localStorage.getItem(k)) localStorage.removeItem(k);
-      });
-    } catch (e) {
-      // ignore storage errors
-    }
-
-    updateUIForAuth();
-    // Inform user
-    alert('You have been logged out.');
-  });
-
-  function openSettings() {
-    const session = getSession();
-    if (!session || session.guest) {
-      alert('Sign in to access Settings.');
-      return;
-    }
-    // Simple settings placeholder
-    alert(`Settings for ${session.email}\n\n(Placeholder)`);
+  if (session || legacyUser) {
+    showChatScreen();
   }
 
-  settingsBtn.addEventListener('click', openSettings);
+  // Logout button
+  var logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', function () {
+      clearSession();
+      var emailEl = document.getElementById('displayEmail');
+      if (emailEl) emailEl.classList.add('hidden');
+      logoutBtn.classList.add('hidden');
+      var settingsBtn = document.getElementById('settingsBtn');
+      if (settingsBtn) settingsBtn.classList.add('hidden');
+      showLoginScreen();
+      alert('You have been logged out.');
+    });
+  }
 
-  // Sidebar Settings button (always visible)
-  const sidebarSettingsBtn = document.getElementById('sidebarSettingsBtn');
+  // Header settings button (logged-in users only)
+  var settingsBtn = document.getElementById('settingsBtn');
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', function () {
+      var s = getSession();
+      alert('Settings for ' + (s ? s.email : 'user') + '\n\n(Placeholder)');
+    });
+  }
+
+  // Sidebar settings button
+  var sidebarSettingsBtn = document.getElementById('sidebarSettingsBtn');
   if (sidebarSettingsBtn) {
-    sidebarSettingsBtn.addEventListener('click', openSettings);
+    sidebarSettingsBtn.addEventListener('click', function () {
+      var s = getSession();
+      if (!s || s.guest) {
+        alert('Sign in to access Settings.');
+        return;
+      }
+      alert('Settings for ' + s.email + '\n\n(Placeholder)');
+    });
   }
 
-  // Disable chat controls until authenticated (safety)
-  userInput.disabled = true;
-  sendBtn.disabled = true;
-  newChatBtn.disabled = true;
-
-  // Initialize UI based on session
-  updateUIForAuth();
-=======
+  // New Chat button state (chat.js handles the click, but auth controls disabled state)
+  var newChatBtn = document.getElementById('newChatBtn');
+  if (newChatBtn) {
+    newChatBtn.disabled = !(session || legacyUser);
   }
-
-
 };
