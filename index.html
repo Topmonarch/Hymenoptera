@@ -71,6 +71,32 @@
       background: #1a6fd8;
     }
 
+    #chat-history {
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .chat-item {
+      padding: 9px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #ccc;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chat-item:hover {
+      background: #1a2030;
+      color: white;
+    }
+
+    .chat-item.active {
+      background: #1a2d4a;
+      color: white;
+    }
+
     .sidebar-spacer {
       flex: 1;
     }
@@ -414,7 +440,7 @@
 
     <button class="new-chat-btn" onclick="newChat()">+ New Chat</button>
 
-    <div class="sidebar-spacer"></div>
+    <div id="chat-history"></div>
 
     <div class="sidebar-account">
       <div id="account-label"></div>
@@ -506,15 +532,6 @@
       document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
       document.getElementById('section-signin').classList.toggle('active', tab === 'signin');
       document.getElementById('section-signup').classList.toggle('active', tab === 'signup');
-    }
-
-    function newChat() {
-      var user = localStorage.getItem('hymenoptera_user');
-      if (!user) return;
-      if (window.clearMessages) window.clearMessages();
-      document.getElementById('messages').innerHTML = '';
-      var emptyState = document.getElementById('empty-state');
-      if (emptyState) emptyState.classList.remove('hidden');
     }
   </script>
   
