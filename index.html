@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Hymenoptera</title>
+<title>HYMENOPTERA</title>
 
 <style>
 /* Basic reset and theme */
@@ -25,7 +25,6 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
 .main { flex: 1; display:flex; flex-direction:column; }
 
 /* Header */
-/* Use position:relative so we can center the brand (logo + title) in the top center */
 .header {
   position: relative;
   display:flex;
@@ -35,24 +34,27 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
   min-height:72px;
 }
 
-/* Centered brand (logo + title) placed absolutely in the center of the header */
+/* Centered brand (logo above the title) */
 .center-brand {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
   display:flex;
-  align-items:center;
-  gap:12px;
+  flex-direction: column;
+  align-items: center;
+  gap:8px;
   text-align:center;
 }
 .center-brand img.logo-img {
-  width:56px;
-  height:56px;
+  width:64px;
+  height:64px;
   object-fit:contain;
-  border-radius:8px;
-  box-shadow: 0 6px 20px rgba(45,140,255,0.12);
-  background: linear-gradient(90deg,#2D8CFF,#8A2BE2);
-  padding:6px;
+  /* No background, no box, clean image only */
+  background: none;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
 }
 .center-brand .title {
   font-size:18px;
@@ -129,10 +131,10 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
   <!-- Main area -->
   <div class="main">
     <div class="header">
-      <!-- Centered logo + title -->
+      <!-- Centered logo above the title -->
       <div class="center-brand" aria-hidden="false">
         <img src="logo-icon.png" alt="Hymenoptera logo" class="logo-img" />
-        <div class="title">HYMENOPTERA AI</div>
+        <div class="title">HYMENOPTERA</div>
       </div>
 
       <!-- User area aligned to the right -->
@@ -211,5 +213,4 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
   <script src="auth.js"></script>
   <script src="chat.js"></script>
 </body>
-</html>
 </html>
