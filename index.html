@@ -7,7 +7,7 @@
 <style>
 
 :root{
-  /* Change this to match your insect icon color if different */
+  /* Accent color for the glow (change if your insect icon uses a different hex) */
   --accent-color: #2D8CFF;
   --accent-glow: rgba(45,140,255,0.6);
 }
@@ -33,13 +33,13 @@ height:40px;
 .title{
   font-weight:800;
   letter-spacing:4px;
-  color:var(--accent-color); /* default color for title */
+  color:white; /* visible text color is white */
   margin:0;
 }
 
 /* Glow effect (applies to text and buttons) */
+/* Note: .glow no longer sets the element color so the text remains white */
 .glow {
-  color: var(--accent-color);
   text-shadow:
     0 0 6px rgba(255,255,255,0.05),
     0 0 10px var(--accent-glow),
@@ -115,7 +115,7 @@ button{
 padding:12px;
 background:#1976d2;
 border:none;
-color:white;
+color:white; /* button text visible color is white */
 cursor:pointer;
 }
 
@@ -128,6 +128,8 @@ cursor:pointer;
     0 0 12px rgba(45,140,255,0.18);
   border: 1px solid rgba(255,255,255,0.04);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
+  color: white; /* ensure the send button's text is white */
+  font-weight:600;
 }
 
 /* stronger glow when .glow class is present on the send button */
@@ -201,7 +203,7 @@ width:300px;
 
 <input id="message-input" placeholder="Ask something...">
 
-<!-- send button given classes so it uses the glowing accent -->
+<!-- send button text is white, glow remains blue -->
 <button onclick="sendMessage()" class="send-btn glow">Send</button>
 
 </div>
@@ -260,9 +262,6 @@ container.scrollTop = container.scrollHeight;
 }
 
 </script>
-
-</body>
-</html>
 
 </body>
 </html>
