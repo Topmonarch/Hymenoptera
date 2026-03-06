@@ -7,7 +7,7 @@
 <style>
 
 :root{
-  /* Accent color for the glow (change if your insect icon uses a different hex) */
+  /* Exact accent color used for the insect icon / title glow */
   --accent-color: #2D8CFF;
   --accent-glow: rgba(45,140,255,0.6);
 }
@@ -29,16 +29,16 @@ border-bottom:1px solid #222;
 height:40px;
 }
 
-/* Title styling */
+/* Title styling: visible color is the exact blue accent */
 .title{
   font-weight:800;
   letter-spacing:4px;
-  color:white; /* visible text color is white */
+  color: var(--accent-color); /* visible text color: exact blue */
   margin:0;
 }
 
 /* Glow effect (applies to text and buttons) */
-/* Note: .glow no longer sets the element color so the text remains white */
+/* Keeps the glow in the blue accent while the title text itself is blue */
 .glow {
   text-shadow:
     0 0 6px rgba(255,255,255,0.05),
