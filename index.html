@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+
 
 <title>Hymenoptera</title>
 
@@ -408,6 +409,532 @@ function signOut(){
 setAccountDisplay();
 
 </script>
+=======
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HYMENOPTERA</title>
+  <style>
+    :root {
+      --accent-color: #2D8CFF;
+      --accent-glow: rgba(45,140,255,0.6);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      background: #0b0f14;
+      color: white;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: #0e131a;
+      border-right: 1px solid #1e2530;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 12px;
+      gap: 12px;
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sidebar-brand img {
+      height: 36px;
+      width: 36px;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+
+    .sidebar-title {
+      font-weight: 800;
+      color: var(--accent-color);
+      letter-spacing: 2px;
+      font-size: 14px;
+    }
+
+    .new-chat-btn {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--accent-color);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    .new-chat-btn:hover {
+      background: #1a6fd8;
+    }
+
+    .sidebar-spacer {
+      flex: 1;
+    }
+
+    .sidebar-account {
+      padding: 10px 0 0;
+      border-top: 1px solid #1e2530;
+      font-size: 13px;
+    }
+
+    #account-label {
+      color: #aaa;
+      margin-bottom: 6px;
+      word-break: break-all;
+    }
+
+    .sidebar-btn {
+      width: 100%;
+      padding: 8px 10px;
+      background: #1a2030;
+      border: 1px solid #2a3040;
+      border-radius: 6px;
+      color: #ccc;
+      cursor: pointer;
+      font-size: 13px;
+      text-align: left;
+      margin-top: 4px;
+    }
+
+    .sidebar-btn:hover {
+      background: #222d3f;
+      color: white;
+    }
+
+    /* ===== MAIN AREA ===== */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ===== LOGIN SCREEN ===== */
+    #login-screen {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .login-box {
+      background: #111;
+      padding: 36px;
+      border-radius: 12px;
+      width: 340px;
+      border: 1px solid #1e2530;
+    }
+
+    .login-box h2 {
+      margin: 0 0 20px;
+      color: var(--accent-color);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-shadow:
+        0 0 6px rgba(255,255,255,0.05),
+        0 0 10px var(--accent-glow),
+        0 0 20px rgba(45,140,255,0.25);
+    }
+
+    .form-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 8px;
+      background: #1a2030;
+      border: 1px solid #2a3040;
+      border-radius: 6px;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .tab-btn.active {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+      color: white;
+    }
+
+    .form-section {
+      display: none;
+    }
+
+    .form-section.active {
+      display: block;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 5px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #0e131a;
+      border: 1px solid #2a3040;
+      border-radius: 6px;
+      color: white;
+      font-size: 14px;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent-color);
+    }
+
+    .form-error {
+      color: #ff8b8b;
+      font-size: 13px;
+      margin-top: 6px;
+      min-height: 18px;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 11px;
+      background: var(--accent-color);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .submit-btn:hover {
+      background: #1a6fd8;
+    }
+
+    .guest-divider {
+      text-align: center;
+      color: #555;
+      font-size: 12px;
+      margin: 16px 0 12px;
+      position: relative;
+    }
+
+    .guest-divider::before,
+    .guest-divider::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 40%;
+      height: 1px;
+      background: #2a3040;
+    }
+
+    .guest-divider::before { left: 0; }
+    .guest-divider::after { right: 0; }
+
+    .guest-btn {
+      width: 100%;
+      padding: 10px;
+      background: transparent;
+      border: 1px solid #2a3040;
+      border-radius: 6px;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .guest-btn:hover {
+      border-color: var(--accent-color);
+      color: white;
+    }
+
+    /* ===== CHAT SCREEN ===== */
+    #chat-screen {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .message {
+      margin: 10px 0;
+      padding: 10px 14px;
+      border-radius: 8px;
+      max-width: 80%;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .message.user {
+      background: #1a2d4a;
+      color: #4fc3f7;
+      margin-left: auto;
+    }
+
+    .message.assistant {
+      background: #1a2a1a;
+      color: #90ee90;
+    }
+
+    #input-area {
+      display: flex;
+      border-top: 1px solid #1e2530;
+      padding: 8px;
+      gap: 8px;
+    }
+
+    #message-input {
+      flex: 1;
+      padding: 12px 14px;
+      background: #111;
+      color: white;
+      border: 1px solid #2a3040;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    #message-input:focus {
+      outline: none;
+      border-color: var(--accent-color);
+    }
+
+    /* ===== SEND BUTTON ===== */
+    .send-btn {
+      padding: 12px 20px;
+      background: linear-gradient(180deg, var(--accent-color), #175fb8);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow:
+        0 6px 18px rgba(0,0,0,0.4),
+        0 0 12px rgba(45,140,255,0.3);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .send-btn.glow {
+      box-shadow:
+        0 6px 22px rgba(0,0,0,0.45),
+        0 0 12px rgba(45,140,255,0.6),
+        0 0 30px rgba(45,140,255,0.25);
+      animation: pulse 2s infinite;
+    }
+
+    .send-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .send-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow:
+          0 6px 18px rgba(0,0,0,0.4),
+          0 0 8px rgba(45,140,255,0.45),
+          0 0 14px rgba(45,140,255,0.18);
+      }
+      50% {
+        box-shadow:
+          0 6px 22px rgba(0,0,0,0.45),
+          0 0 12px rgba(45,140,255,0.68),
+          0 0 28px rgba(45,140,255,0.28);
+      }
+      100% {
+        box-shadow:
+          0 6px 18px rgba(0,0,0,0.4),
+          0 0 8px rgba(45,140,255,0.45),
+          0 0 14px rgba(45,140,255,0.18);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-brand">
+      <img src="hymenoptera_logo_transparent.png" alt="Hymenoptera" />
+      <div class="sidebar-title">HYMENOPTERA</div>
+    </div>
+
+    <button class="new-chat-btn" onclick="newChat()">+ New Chat</button>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="sidebar-account">
+      <div id="account-label"></div>
+      <button id="signoutBtn" class="sidebar-btn" onclick="signOut()" style="display:none;">Sign Out</button>
+    </div>
+  </div>
+
+  <!-- Main area -->
+  <div class="main">
+
+    <!-- Login Screen -->
+    <div id="login-screen">
+      <div class="login-box">
+        <h2>HYMENOPTERA</h2>
+
+        <div class="form-tabs">
+          <button class="tab-btn active" id="tab-signin" onclick="switchTab('signin')">Sign In</button>
+          <button class="tab-btn" id="tab-signup" onclick="switchTab('signup')">Create Account</button>
+        </div>
+
+        <!-- Sign In form -->
+        <div id="section-signin" class="form-section active">
+          <div class="form-group">
+            <label for="signin-email">Email</label>
+            <input id="signin-email" type="email" placeholder="you@example.com" />
+          </div>
+          <div class="form-group">
+            <label for="signin-password">Password</label>
+            <input id="signin-password" type="password" placeholder="Password"
+              onkeydown="if(event.key==='Enter'){signIn();}" />
+          </div>
+          <div id="signin-error" class="form-error"></div>
+          <button class="submit-btn" onclick="signIn()">Sign In</button>
+          <div class="guest-divider">or</div>
+          <button class="guest-btn" onclick="continueAsGuest()">Continue as Guest</button>
+        </div>
+
+        <!-- Create Account form -->
+        <div id="section-signup" class="form-section">
+          <div class="form-group">
+            <label for="signup-email">Email</label>
+            <input id="signup-email" type="email" placeholder="you@example.com" />
+          </div>
+          <div class="form-group">
+            <label for="signup-password">Password</label>
+            <input id="signup-password" type="password" placeholder="Password" />
+          </div>
+          <div class="form-group">
+            <label for="signup-confirm">Confirm Password</label>
+            <input id="signup-confirm" type="password" placeholder="Confirm Password"
+              onkeydown="if(event.key==='Enter'){createAccount();}" />
+          </div>
+          <div id="signup-error" class="form-error"></div>
+          <button class="submit-btn" onclick="createAccount()">Create Account</button>
+          <div class="guest-divider">or</div>
+          <button class="guest-btn" onclick="continueAsGuest()">Continue as Guest</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chat Screen -->
+    <div id="chat-screen">
+      <div id="messages"></div>
+      <div id="input-area">
+        <input id="message-input" placeholder="Ask something..."
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}" />
+        <!-- send button text is white, glow remains blue -->
+        <button class="send-btn glow" onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="auth.js"></script>
+
+  <script>
+    function switchTab(tab) {
+      document.getElementById('tab-signin').classList.toggle('active', tab === 'signin');
+      document.getElementById('tab-signup').classList.toggle('active', tab === 'signup');
+      document.getElementById('section-signin').classList.toggle('active', tab === 'signin');
+      document.getElementById('section-signup').classList.toggle('active', tab === 'signup');
+    }
+
+    // Accumulate conversation history for multi-turn context
+    var conversationHistory = [];
+
+    function newChat() {
+      var user = localStorage.getItem('hymenoptera_user');
+      if (!user) return;
+      document.getElementById('messages').innerHTML = '';
+      conversationHistory = [];
+    }
+
+    async function sendMessage() {
+      var input = document.getElementById('message-input');
+      var message = (input.value || '').trim();
+      if (!message) return;
+
+      addMessage('user', message);
+      conversationHistory.push({ role: 'user', content: message });
+      input.value = '';
+
+      try {
+        var response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: conversationHistory })
+        });
+
+        var data;
+        try {
+          data = await response.json();
+        } catch (e) {
+          addMessage('assistant', 'Error: Invalid response from server.');
+          return;
+        }
+
+        if (!response.ok) {
+          var errMsg = (data && data.error)
+            ? (data.error.message || JSON.stringify(data.error))
+            : 'Server error';
+          addMessage('assistant', 'Error: ' + errMsg);
+          return;
+        }
+
+        var reply = data.reply || JSON.stringify(data);
+        addMessage('assistant', reply);
+        conversationHistory.push({ role: 'assistant', content: reply });
+      } catch (err) {
+        addMessage('assistant', 'Network error: ' + String(err));
+      }
+    }
+
+    function addMessage(type, text) {
+      var container = document.getElementById('messages');
+      var div = document.createElement('div');
+      div.className = 'message ' + type;
+      div.textContent = text;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+  </script>
+  
 
 </body>
 </html>
