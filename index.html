@@ -2,235 +2,92 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Hymenoptera AI</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    /* Updated header layout to center logo above the title in the middle */
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-    header {
-      background:#222;
-      color:#fff;
-      padding: 12px 16px;
-      display: grid;
-      grid-template-columns: 1fr auto 1fr; /* left spacer, center title block, right user display */
-      align-items: center;
-      gap: 8px;
-      min-height: 64px;
-    }
-    .header-left { /* empty left area for spacing if needed */ }
-    .title-area {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-      text-align: center;
-    }
-    #logoIcon {
-      width: 48px;
-      height: 48px;
-      object-fit: contain;
-      background: transparent; /* ensure no background if the asset is transparent */
-      display: block;
-    }
-    .site-title {
-      font-weight:700;
-      letter-spacing:1px;
-      text-transform:uppercase;
-      font-size: 16px;
-    }
-    #userDisplay {
-      justify-self: end;
-      font-weight:600;
-    }
-
-    .container { padding: 16px; }
-    .signin { max-width:360px; margin: 24px auto; border:1px solid #ddd; padding:16px; border-radius:6px; }
-    .signin input { display:block; width:100%; margin:8px 0; padding:8px; }
-    .signin button { padding:8px 12px; margin-right:8px; }
-    #chat { max-width:720px; margin: 24px auto; border:1px solid #eee; padding:12px; border-radius:6px; }
-    #saveChatBtn[disabled] { opacity:0.5; cursor:not-allowed; }
-  </style>
+  <title>Hymenoptera</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script defer src="chat.js"></script>
 </head>
 <body>
-  <header>
-    <div class="header-left"></div>
-
-    <!-- Centered title area with logo above the text (user requested "my hymenoptera without the background as an icon" shown above middle) -->
-    <div class="title-area" aria-hidden="false">
-      <!-- Place your transparent-background icon at assets/hymenoptera-icon.svg (or .png). -->
-      <img id="logoIcon" src="assets/hymenoptera-icon.svg" alt="Hymenoptera icon" />
-      <div class="site-title">HYMENOPTERA</div>
-    </div>
-
-    <div id="userDisplay">Not signed in</div>
+  <header class="app-header">
+    <!-- Logo centered above the title -->
+    <img src="logo.png" alt="Hymenoptera logo" class="logo" />
+    <h1 class="title">Hymenoptera</h1>
   </header>
 
-  <main class="container">
-    <section class="signin" id="authSection">
-      <h3>Sign In</h3>
-      <input type="email" id="emailInput" placeholder="Email" />
-      <input type="password" id="passwordInput" placeholder="Password" />
-      <div>
-        <button id="signInBtn">Sign In</button>
-        <button id="createAccountBtn">Create Account</button>
+  <div class="app">
+    <aside class="sidebar" aria-label="Sidebar">
+      <button id="newChatBtn" class="btn new-chat">+ New Chat</button>
+      <!-- Additional sidebar items could go here -->
+      <div class="sidebar-spacer" style="flex:1"></div>
+    </aside>
+
+    <main class="chat-wrapper" role="main">
+      <div id="chatContainer" class="chat-container hidden" aria-live="polite">
+        <div id="messages" class="messages" role="log" aria-live="polite"></div>
+
+        <form id="messageForm" class="message-form" onsubmit="event.preventDefault(); sendMessage();">
+          <textarea id="messageInput" class="message-input" placeholder="Type a message..." rows="1" aria-label="Message input"></textarea>
+          <button id="sendBtn" type="button" class="btn send" onclick="sendMessage()">Send</button>
+        </form>
       </div>
 
-      <!-- Continue as Guest button -->
-      <div style="margin-top:12px;">
-        <button id="continueGuestBtn">Continue as Guest</button>
-        <small style="display:block; margin-top:6px; color:#666;">
-          Guests can chat temporarily. Session is cleared when you close the tab. Saving chat history is disabled.
-        </small>
+      <div id="welcomeContainer" class="welcome-container">
+        <p>Welcome to Hymenoptera. Sign in, create an account, or continue as a guest to start chatting.</p>
       </div>
-    </section>
+    </main>
+  </div>
 
-    <section id="chat" style="display:none;">
-      <h3>AI Chat</h3>
-      <div id="chatMessages" style="min-height:160px; border:1px solid #f0f0f0; padding:8px; margin-bottom:8px; overflow:auto;"></div>
-      <input id="chatInput" placeholder="Type a message..." style="width:100%; padding:8px;" />
-      <div style="margin-top:8px;">
-        <button id="sendBtn">Send</button>
-        <button id="saveChatBtn">Save Chat</button>
+  <!-- Authentication overlay -->
+  <div id="authOverlay" class="auth-overlay">
+    <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <h2 id="authTitle">Sign In</h2>
+
+      <div class="auth-tabs">
+        <button id="tabSignIn" class="tab active" type="button">Sign In</button>
+        <button id="tabSignUp" class="tab" type="button">Create Account</button>
       </div>
-    </section>
 
-  </main>
+      <div id="signInForm" class="auth-form">
+        <label>
+          Email
+          <input id="signinEmail" type="email" placeholder="you@example.com" />
+        </label>
+        <label>
+          Password
+          <input id="signinPassword" type="password" placeholder="Password" />
+        </label>
+        <div class="auth-actions">
+          <button id="signInBtn" class="btn primary" type="button">Sign In</button>
+        </div>
+      </div>
 
-  <script src="auth.js"></script>
-  <script>
-    // UI integration with Auth (same as before, guest-flow preserved)
-    document.addEventListener('DOMContentLoaded', () => {
-      const signInBtn = document.getElementById('signInBtn');
-      const createAccountBtn = document.getElementById('createAccountBtn');
-      const continueGuestBtn = document.getElementById('continueGuestBtn');
-      const emailInput = document.getElementById('emailInput');
-      const passwordInput = document.getElementById('passwordInput');
+      <div id="signUpForm" class="auth-form hidden">
+        <label>
+          Name
+          <input id="signupName" type="text" placeholder="Your name" />
+        </label>
+        <label>
+          Email
+          <input id="signupEmail" type="email" placeholder="you@example.com" />
+        </label>
+        <label>
+          Password
+          <input id="signupPassword" type="password" placeholder="Password" />
+        </label>
+        <div class="auth-actions">
+          <button id="signUpBtn" class="btn primary" type="button">Create Account</button>
+        </div>
+      </div>
 
-      const userDisplay = document.getElementById('userDisplay');
-      const authSection = document.getElementById('authSection');
-      const chatSection = document.getElementById('chat');
-      const sendBtn = document.getElementById('sendBtn');
-      const saveChatBtn = document.getElementById('saveChatBtn');
-      const chatMessages = document.getElementById('chatMessages');
-      const chatInput = document.getElementById('chatInput');
+      <div class="auth-divider">or</div>
 
-      function updateUIForAuth(user) {
-        if (!user) {
-          userDisplay.textContent = 'Not signed in';
-          authSection.style.display = 'block';
-          chatSection.style.display = 'none';
-        } else {
-          if (user.guest) {
-            userDisplay.textContent = 'Guest User';
-          } else {
-            userDisplay.textContent = user.email || user.name || 'Signed-in User';
-          }
-          authSection.style.display = 'none';
-          chatSection.style.display = 'block';
-        }
+      <div class="auth-guest">
+        <button id="guestBtn" class="btn secondary" type="button">Continue as Guest</button>
+      </div>
 
-        if (Auth.canSaveHistory()) {
-          saveChatBtn.disabled = false;
-        } else {
-          saveChatBtn.disabled = true;
-        }
-      }
+      <button id="closeAuth" class="auth-close" aria-label="Close authentication" type="button">×</button>
+    </div>
+  </div>
 
-      Auth.onAuthChange((user) => {
-        updateUIForAuth(user);
-      });
-
-      signInBtn.addEventListener('click', () => {
-        const email = emailInput.value.trim();
-        const password = passwordInput.value;
-        if (!email || !password) {
-          alert('Please enter email and password.');
-          return;
-        }
-        signInBtn.disabled = true;
-        Auth.signIn(email, password)
-          .catch((err) => {
-            console.error(err);
-            alert('Sign-in failed. Check credentials.');
-          })
-          .finally(() => { signInBtn.disabled = false; });
-      });
-
-      createAccountBtn.addEventListener('click', () => {
-        const email = emailInput.value.trim();
-        const password = passwordInput.value;
-        if (!email || !password) {
-          alert('Please enter email and password to create an account.');
-          return;
-        }
-        createAccountBtn.disabled = true;
-        Auth.createAccount(email, password)
-          .catch((err) => {
-            console.error(err);
-            alert('Account creation failed.');
-          })
-          .finally(() => { createAccountBtn.disabled = false; });
-      });
-
-      continueGuestBtn.addEventListener('click', () => {
-        continueGuestBtn.disabled = true;
-        Auth.continueAsGuest()
-          .then(() => {
-            console.info('Entered guest mode.');
-          })
-          .finally(() => { continueGuestBtn.disabled = false; });
-      });
-
-      sendBtn.addEventListener('click', () => {
-        const text = chatInput.value.trim();
-        if (!text) return;
-        appendMessage('You', text);
-        chatInput.value = '';
-        appendMessage('AI', 'Thinking...');
-        setTimeout(() => {
-          const nodes = chatMessages.querySelectorAll('.msg');
-          const last = nodes[nodes.length - 1];
-          if (last) last.querySelector('.body').textContent = 'This is an AI response to: ' + text;
-        }, 800);
-      });
-
-      saveChatBtn.addEventListener('click', () => {
-        if (!Auth.canSaveHistory()) {
-          alert('Saving chat history is only available to logged-in users. Create an account or sign in to save.');
-          return;
-        }
-        const messages = Array.from(chatMessages.querySelectorAll('.msg')).map((m) => ({
-          author: m.dataset.author,
-          body: m.querySelector('.body').textContent
-        }));
-
-        fetch('/api/chats/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages })
-        })
-          .then((r) => {
-            if (!r.ok) throw new Error('Save failed');
-            return r.json();
-          })
-          .then(() => { alert('Chat saved'); })
-          .catch((err) => { console.error(err); alert('Failed to save chat.'); });
-      });
-
-      function appendMessage(author, body) {
-        const el = document.createElement('div');
-        el.className = 'msg';
-        el.dataset.author = author;
-        el.style.padding = '6px 0';
-        el.innerHTML = '<strong>' + author + ':</strong> <span class="body">' + body + '</span>';
-        chatMessages.appendChild(el);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-      }
-
-      const initialUser = Auth.getCurrentUser();
-      updateUIForAuth(initialUser);
-    });
-  </script>
 </body>
 </html>
