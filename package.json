@@ -1,0 +1,12 @@
+{
+  "name": "hymenoptera-ai",
+  "version": "1.0.0",
+  "description": "Hymenoptera AI chat application",
+  "private": true,
+  "dependencies": {
+    "openai": "^4.97.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
