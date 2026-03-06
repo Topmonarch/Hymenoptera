@@ -12,8 +12,21 @@
   var messageInput = document.getElementById('message-input');
   var emptyState = document.getElementById('empty-state');
 
-  // Conversation memory: persists across sends, reset on New Chat
-  var messages = [];
+  // Multi-conversation storage
+  var conversations = {};
+  var currentChatId = null;
+
+  // Load saved conversations from localStorage
+  try {
+    conversations = JSON.parse(localStorage.getItem('hymenoptera_conversations')) || {};
+  } catch (e) {
+    conversations = {};
+  }
+
+  function generateChatId() {
+    var rand = Math.random().toString(36).slice(2, 7);
+    return 'chat_' + Date.now() + '_' + rand;
+  }
 
   function hideEmptyState() {
     if (emptyState) {
@@ -25,6 +38,45 @@
     if (emptyState) {
       emptyState.classList.remove('hidden');
     }
+  }
+
+  function saveConversations() {
+    try {
+      localStorage.setItem('hymenoptera_conversations', JSON.stringify(conversations));
+    } catch (e) {
+      console.warn('saveConversations error', e);
+    }
+  }
+
+  function renderChatHistory() {
+    var history = document.getElementById('chat-history');
+    if (!history) return;
+    history.innerHTML = '';
+    Object.keys(conversations).forEach(function (id, index) {
+      var item = document.createElement('div');
+      item.className = 'chat-item';
+      item.textContent = 'Chat ' + (index + 1);
+      if (id === currentChatId) {
+        item.classList.add('active');
+      }
+      item.onclick = function () { loadChat(id); };
+      history.appendChild(item);
+    });
+  }
+
+  function clearChatUI() {
+    if (messagesEl) messagesEl.innerHTML = '';
+    showEmptyState();
+  }
+
+  function loadChat(chatId) {
+    currentChatId = chatId;
+    var chatMessages = conversations[chatId] || [];
+    clearChatUI();
+    chatMessages.forEach(function (msg) {
+      addMessage(msg.role, msg.content);
+    });
+    renderChatHistory();
   }
 
 
@@ -73,17 +125,25 @@
     var message = (messageInput.value || '').trim();
     if (!message) return;
 
-    // Add user message to conversation memory
-    messages.push({ role: 'user', content: message });
+    // Ensure we have an active chat
+    if (!currentChatId) {
+      currentChatId = generateChatId();
+      conversations[currentChatId] = [];
+      renderChatHistory();
+    }
+
+    // Add user message to conversation
+    conversations[currentChatId].push({ role: 'user', content: message });
     addMessage('user', message);
     saveMessageToHistory({ role: 'user', content: message });
+    saveConversations();
     messageInput.value = '';
 
     try {
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: messages })
+        body: JSON.stringify({ messages: conversations[currentChatId] })
       });
 
       var data;
@@ -101,10 +161,11 @@
 
       // api/chat always returns { reply: assistantText }
       var reply = data.reply || 'No response received from server';
-      // Add assistant reply to conversation memory
-      messages.push({ role: 'assistant', content: reply });
+      // Add assistant reply to conversation
+      conversations[currentChatId].push({ role: 'assistant', content: reply });
       addMessage('assistant', reply);
       saveMessageToHistory({ role: 'assistant', content: reply });
+      saveConversations();
     } catch (err) {
       console.error('sendMessage error:', err);
       addMessage('assistant', 'Error contacting AI server');
@@ -114,9 +175,22 @@
   // Expose sendMessage globally so onclick="sendMessage()" works
   window.sendMessage = sendMessage;
 
-  // Expose clearMessages so newChat() can reset conversation memory
+  // Expose clearMessages for legacy callers (resets the current conversation)
   window.clearMessages = function () {
-    messages = [];
+    if (currentChatId && conversations[currentChatId]) {
+      conversations[currentChatId] = [];
+    }
+  };
+
+  // New chat: create a fresh conversation and update the sidebar
+  window.newChat = function () {
+    var user = localStorage.getItem('hymenoptera_user');
+    if (!user) return;
+    currentChatId = generateChatId();
+    conversations[currentChatId] = [];
+    saveConversations();
+    clearChatUI();
+    renderChatHistory();
   };
 
   // Also wire up the send button via event listener
@@ -137,6 +211,20 @@
       }
     });
   }
+
+  // On page load: render chat history and restore the most recent conversation
+  window.addEventListener('load', function () {
+    renderChatHistory();
+    var ids = Object.keys(conversations).sort(function (a, b) {
+      // IDs are 'chat_TIMESTAMP_random'; sort by numeric timestamp portion
+      var ta = parseInt(a.split('_')[1], 10) || 0;
+      var tb = parseInt(b.split('_')[1], 10) || 0;
+      return ta - tb;
+    });
+    if (ids.length > 0) {
+      loadChat(ids[ids.length - 1]);
+    }
+  });
 
   // Show empty-state on initial load (if chat-screen is visible and no messages)
   showEmptyState();
