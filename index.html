@@ -128,6 +128,7 @@ header{
   flex-direction:column;
   height:100%;
   min-height:0;
+  position:relative;
 }
 
 /* Messages area grows and scrolls */
@@ -278,6 +279,28 @@ button{
   flex:1;
 }
 
+/* Empty-state: centered logo overlay shown when no messages exist */
+.empty-state {
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+  user-select:none;
+  z-index:1;
+}
+
+.empty-state.hidden {
+  display:none;
+}
+
+.empty-state-logo {
+  height:90px;
+  opacity:0.35;
+}
+
 </style>
 
 </head>
@@ -333,6 +356,10 @@ button{
 
     <div id="chat-screen">
 
+      <div id="empty-state" class="empty-state">
+        <img src="hymenoptera_logo_transparent.png" alt="Hymenoptera" class="empty-state-logo">
+      </div>
+
       <div id="messages" aria-live="polite"></div>
 
       <div id="input-area">
@@ -351,6 +378,7 @@ button{
 </div>
 
 <script src="auth.js"></script>
+<script src="chat.js"></script>
 
 <script>
 
@@ -360,11 +388,12 @@ function setAccountDisplay() {
   el.innerText = user ? user : "Not signed in";
 }
 
-/* New chat placeholder */
+/* New chat: clear messages and restore empty-state */
 function newChat(){
-  // clear messages and focus input
   const container = document.getElementById("messages");
   container.innerHTML = "";
+  const emptyState = document.getElementById("empty-state");
+  if (emptyState) emptyState.classList.remove("hidden");
   document.getElementById("message-input").focus();
 }
 
@@ -374,75 +403,6 @@ function signOut(){
   document.getElementById("chat-screen").style.display = "none";
   document.getElementById("login-screen").style.display = "flex";
   setAccountDisplay();
-}
-
-/* sendMessage: POST messages array expected by /api/chat */
-async function sendMessage(){
-
-  const input = document.getElementById("message-input");
-
-  const message = input.value.trim();
-
-  if(!message) return;
-
-  addMessage("user",message);
-
-  input.value="";
-
-  // create an array of messages; only sending the latest user message is acceptable
-  const payload = {
-    messages: [
-      { role: "user", content: message }
-    ]
-  };
-
-  try {
-    const response = await fetch("/api/chat",{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json"
-      },
-      body:JSON.stringify(payload)
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const err = data && data.error && data.error.message ? data.error.message : 'Unknown error';
-      addMessage("bot","Error: "+err);
-      return;
-    }
-
-    // api returns { reply: assistantText }
-    addMessage("bot", data.reply || "No reply");
-
-  } catch (err) {
-    console.error("sendMessage error:", err);
-    addMessage("bot","Network error");
-  }
-
-}
-
-function addMessage(type,text){
-
-  const container = document.getElementById("messages");
-
-  const div = document.createElement("div");
-
-  div.className = "message "+type;
-
-  div.innerText = text;
-
-  container.appendChild(div);
-
-  // scroll to bottom
-  container.scrollTop = container.scrollHeight;
-
-  // focus input after bot replies
-  if (type === "bot") {
-    document.getElementById("message-input").focus();
-  }
-
 }
 
 setAccountDisplay();
