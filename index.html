@@ -6,6 +6,12 @@
 
 <style>
 
+:root{
+  /* Change this to match your insect icon color if different */
+  --accent-color: #2D8CFF;
+  --accent-glow: rgba(45,140,255,0.6);
+}
+
 body{
 background:#0b0f14;
 color:white;
@@ -21,6 +27,50 @@ border-bottom:1px solid #222;
 
 .logo{
 height:40px;
+}
+
+/* Title styling */
+.title{
+  font-weight:800;
+  letter-spacing:4px;
+  color:var(--accent-color); /* default color for title */
+  margin:0;
+}
+
+/* Glow effect (applies to text and buttons) */
+.glow {
+  color: var(--accent-color);
+  text-shadow:
+    0 0 6px rgba(255,255,255,0.05),
+    0 0 10px var(--accent-glow),
+    0 0 20px rgba(45,140,255,0.25);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  animation: pulse 2s infinite;
+}
+
+/* Pulse animation for the glow */
+@keyframes pulse {
+  0% {
+    text-shadow:
+      0 0 4px rgba(255,255,255,0.04),
+      0 0 8px rgba(45,140,255,0.45),
+      0 0 14px rgba(45,140,255,0.18);
+    transform: translateY(0);
+  }
+  50% {
+    text-shadow:
+      0 0 6px rgba(255,255,255,0.05),
+      0 0 12px rgba(45,140,255,0.68),
+      0 0 26px rgba(45,140,255,0.28);
+    transform: translateY(-1px);
+  }
+  100% {
+    text-shadow:
+      0 0 4px rgba(255,255,255,0.04),
+      0 0 8px rgba(45,140,255,0.45),
+      0 0 14px rgba(45,140,255,0.18);
+    transform: translateY(0);
+  }
 }
 
 #chat-screen{
@@ -60,12 +110,41 @@ color:white;
 border:none;
 }
 
+/* General button styles */
 button{
 padding:12px;
 background:#1976d2;
 border:none;
 color:white;
 cursor:pointer;
+}
+
+/* Specific styles for the send button so only it glows with the accent */
+.send-btn{
+  background: linear-gradient(180deg, var(--accent-color), #175fb8);
+  border-radius: 6px;
+  box-shadow:
+    0 6px 18px rgba(0,0,0,0.4),
+    0 0 12px rgba(45,140,255,0.18);
+  border: 1px solid rgba(255,255,255,0.04);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* stronger glow when .glow class is present on the send button */
+.send-btn.glow {
+  box-shadow:
+    0 6px 22px rgba(0,0,0,0.45),
+    0 0 12px rgba(45,140,255,0.6),
+    0 0 30px rgba(45,140,255,0.25);
+}
+
+/* hover/active effects */
+.send-btn:hover {
+  transform: translateY(-2px);
+}
+.send-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.45);
 }
 
 #login-screen{
@@ -89,8 +168,8 @@ width:300px;
 <body>
 
 <header>
-<img src="hymenoptera_logo_transparent.png" class="logo">
-<h2>HYMENOPTERA</h2>
+<img src="hymenoptera_logo_transparent.png" class="logo" alt="Hymenoptera logo">
+<h2 class="title glow">HYMENOPTERA</h2>
 </header>
 
 
@@ -122,7 +201,8 @@ width:300px;
 
 <input id="message-input" placeholder="Ask something...">
 
-<button onclick="sendMessage()">Send</button>
+<!-- send button given classes so it uses the glowing accent -->
+<button onclick="sendMessage()" class="send-btn glow">Send</button>
 
 </div>
 
@@ -180,6 +260,9 @@ container.scrollTop = container.scrollHeight;
 }
 
 </script>
+
+</body>
+</html>
 
 </body>
 </html>
