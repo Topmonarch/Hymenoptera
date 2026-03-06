@@ -4,8 +4,6 @@
 // Always returns JSON. On success: { reply: assistantText }
 // On error: { error: { message: string } }
 
-const https = require('https');
-
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
 
@@ -15,23 +13,6 @@ module.exports = async function handler(req, res) {
 
   try {
     const { messages } = req.body || {};
-
-
-// Always returns JSON. On success: { reply: assistantText }
-// On error: { error: { message: string } }
-
-const https = require('https');
-
-module.exports = async function handler(req, res) {
-  res.setHeader('Content-Type', 'application/json');
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: { message: 'Method not allowed' } });
-  }
-
-  try {
-    const { messages } = req.body || {};
-
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: { message: 'messages array required' } });
@@ -42,73 +23,26 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: { message: 'API key not configured' } });
     }
 
-
-    // Read the last user message for the Responses API input
-    const lastMessage = messages[messages.length - 1];
-    const userContent = (lastMessage && lastMessage.content) ? lastMessage.content : '';
-
-    const reqBody = JSON.stringify({
-      model: 'gpt-4o-mini',
-      input: userContent
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        model: 'gpt-4.1-mini',
+        input: messages
+      })
     });
 
-    const { statusCode, raw } = await new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.openai.com',
-        path: '/v1/responses',
-
-
-    const reqBody = JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: messages
-    });
-
-    const openaiData = await new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.openai.com',
-        path: '/v1/chat/completions',
-
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey,
-          'Content-Length': Buffer.byteLength(reqBody)
-        }
-      };
-
-      const request = https.request(options, (response) => {
-
-        let data = '';
-        response.on('data', (chunk) => { data += chunk; });
-        response.on('end', () => resolve({ statusCode: response.statusCode, raw: data }));
-
-        let raw = '';
-        response.on('data', (chunk) => { raw += chunk; });
-        response.on('end', () => {
-          try {
-            resolve(JSON.parse(raw));
-          } catch (e) {
-            reject(new Error('Invalid JSON from OpenAI'));
-          }
-        });
-
-      });
-
-      request.on('error', reject);
-      request.write(reqBody);
-      request.end();
-    });
-
-
-    // Parse upstream response; treat non-JSON as 502
     let openaiData;
     try {
-      openaiData = JSON.parse(raw);
+      openaiData = await response.json();
     } catch (e) {
       return res.status(502).json({ error: { message: 'Invalid response from upstream' } });
     }
 
-    if (statusCode >= 400) {
+    if (!response.ok) {
       const upstreamError = (openaiData && openaiData.error) ? openaiData.error : { message: 'Upstream error' };
       return res.status(502).json({ error: upstreamError });
     }
@@ -137,18 +71,6 @@ module.exports = async function handler(req, res) {
     if (!assistantText) {
       return res.status(502).json({ error: { message: 'Unexpected response structure from upstream' } });
     }
-
-
-
-    if (openaiData.error) {
-      return res.status(502).json({ error: openaiData.error });
-    }
-
-    if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
-      return res.status(502).json({ error: { message: 'Unexpected response structure from OpenAI' } });
-    }
-
-    const assistantText = openaiData.choices[0].message.content;
 
     return res.status(200).json({ reply: assistantText });
   } catch (err) {

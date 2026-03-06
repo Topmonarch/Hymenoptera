@@ -511,6 +511,7 @@
     function newChat() {
       var user = localStorage.getItem('hymenoptera_user');
       if (!user) return;
+      if (window.clearMessages) window.clearMessages();
       document.getElementById('messages').innerHTML = '';
       var emptyState = document.getElementById('empty-state');
       if (emptyState) emptyState.classList.remove('hidden');

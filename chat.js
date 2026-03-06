@@ -1,5 +1,6 @@
 // chat.js
 // Frontend chat handler: POST to /api/chat, read data.reply, manage empty-state.
+// Maintains conversation memory in messages array.
 
 // Preserves hymAuth checks and saveMessageToHistory behavior.
 
@@ -10,6 +11,9 @@
   var messagesEl = document.getElementById('messages');
   var messageInput = document.getElementById('message-input');
   var emptyState = document.getElementById('empty-state');
+
+  // Conversation memory: persists across sends, reset on New Chat
+  var messages = [];
 
   function hideEmptyState() {
     if (emptyState) {
@@ -57,9 +61,6 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
     if (type === 'assistant' && messageInput) {
-
-    if (type === 'bot' && messageInput) {
-
       messageInput.focus();
     }
   }
@@ -72,73 +73,51 @@
     var message = (messageInput.value || '').trim();
     if (!message) return;
 
+    // Add user message to conversation memory
+    messages.push({ role: 'user', content: message });
     addMessage('user', message);
-
     saveMessageToHistory({ role: 'user', content: message });
     messageInput.value = '';
-
-    // Send only the current user message; api/chat reads the last message from the array.
-
-    messageInput.value = '';
-
-
-    var payload = {
-      messages: [{ role: 'user', content: message }]
-    };
 
     try {
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ messages: messages })
       });
 
       var data;
       try {
         data = await response.json();
       } catch (e) {
-
-        addMessage('assistant', 'Error: Invalid response from server.');
-
-        addMessage('bot', 'Error: Invalid response from server.');
-
+        addMessage('assistant', 'Error contacting AI server');
         return;
       }
 
       if (!response.ok) {
-
-        var errMsg = (data && data.error)
-          ? (data.error.message || JSON.stringify(data.error))
-          : 'Server error';
-        addMessage('assistant', 'Error: ' + errMsg);
-
-        var errMsg = (data && data.error && data.error.message)
-          ? data.error.message
-          : 'Server error';
-        addMessage('bot', 'Error: ' + errMsg);
-
+        addMessage('assistant', 'Error contacting AI server');
         return;
       }
 
       // api/chat always returns { reply: assistantText }
-
       var reply = data.reply || 'No response received from server';
+      // Add assistant reply to conversation memory
+      messages.push({ role: 'assistant', content: reply });
       addMessage('assistant', reply);
       saveMessageToHistory({ role: 'assistant', content: reply });
     } catch (err) {
       console.error('sendMessage error:', err);
-      addMessage('assistant', 'Network error');
-
-      addMessage('bot', data.reply || 'No reply');
-    } catch (err) {
-      console.error('sendMessage error:', err);
-      addMessage('bot', 'Network error');
-
+      addMessage('assistant', 'Error contacting AI server');
     }
   }
 
   // Expose sendMessage globally so onclick="sendMessage()" works
   window.sendMessage = sendMessage;
+
+  // Expose clearMessages so newChat() can reset conversation memory
+  window.clearMessages = function () {
+    messages = [];
+  };
 
   // Also wire up the send button via event listener
   var sendBtn = document.querySelector('.send-btn');
