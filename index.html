@@ -1,100 +1,217 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Hymenoptera</title>
+  <title>Hymenoptera AI</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    :root { color-scheme: dark; }
-    body { margin:0; background:#060606; color:#ddd; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
-    .main { max-width:1100px; margin:24px auto; padding:0 16px; }
-    .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-    .center-brand { display:flex; align-items:center; gap:12px; }
-    .logo-img { width:56px; height:56px; display:block; }
-    .title { font-weight:800; color:#2D8CFF; letter-spacing:2px; font-size:18px; }
-    #chat { height:420px; background:#0b0b0b; border:1px solid #111; border-radius:8px; padding:18px; overflow:auto; margin-top:16px; display:flex; flex-direction:column; gap:12px; }
-    .input-area { padding:12px; border-top:1px solid #111; display:flex; gap:10px; margin-top:12px; align-items:center; }
-    .input-area input[type="text"] { flex:1; padding:10px; border-radius:8px; border:1px solid #222; background:#0b0b0b; color:#fff; }
-    .send-btn { padding:10px 14px; border-radius:8px; border:none; background:#2D8CFF; color:black; cursor:pointer; }
-    .hidden { display:none; }
-    .auth-panel {
-      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-      background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.8));
-      z-index:50;
-      padding:20px;
-    }
-    .auth-card { width:420px; background:#0b0b0b; border-radius:10px; padding:20px; border:1px solid #222; color:#ddd; }
-    /* Ensure auth panel does not block pointer events when hidden (defensive) */
-    .hidden.auth-panel { display:none; pointer-events:none; }
+    /* Minimal styles for the example */
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    header { background:#222; color:#fff; padding: 12px 16px; display:flex; align-items:center; justify-content:space-between; }
+    #userDisplay { font-weight:600; }
+    .container { padding: 16px; }
+    .signin { max-width:360px; margin: 24px auto; border:1px solid #ddd; padding:16px; border-radius:6px; }
+    .signin input { display:block; width:100%; margin:8px 0; padding:8px; }
+    .signin button { padding:8px 12px; margin-right:8px; }
+    #chat { max-width:720px; margin: 24px auto; border:1px solid #eee; padding:12px; border-radius:6px; }
+    #saveChatBtn[disabled] { opacity:0.5; cursor:not-allowed; }
   </style>
 </head>
 <body>
-  <div class="main">
-    <div class="header">
-      <div class="center-brand" aria-hidden="false">
-        <!-- Inline SVG logo so logo always appears without external file -->
-        <svg class="logo-img" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hymenoptera logo">
-          <defs>
-            <linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#2D8CFF"/><stop offset="1" stop-color="#8A2BE2"/></linearGradient>
-          </defs>
-          <rect width="64" height="64" rx="10" fill="url(#lg)"/>
-          <g transform="translate(12,12)" fill="#fff" opacity="0.95">
-            <path d="M20 0C26 0 30 4 30 10s-4 10-10 10S10 16 10 10 14 0 20 0z"/>
-            <circle cx="20" cy="32" r="6"/>
-          </g>
-        </svg>
-        <div>
-          <div class="title">HYMENOPTERA</div>
-          <div style="font-size:12px;color:#aaa;">AI assistant</div>
-        </div>
+  <header>
+    <div>
+      <strong>Hymenoptera AI</strong>
+    </div>
+    <div id="userDisplay">Not signed in</div>
+  </header>
+
+  <main class="container">
+    <section class="signin" id="authSection">
+      <h3>Sign In</h3>
+      <input type="email" id="emailInput" placeholder="Email" />
+      <input type="password" id="passwordInput" placeholder="Password" />
+      <div>
+        <button id="signInBtn">Sign In</button>
+        <button id="createAccountBtn">Create Account</button>
       </div>
 
-      <div class="user-area" id="userArea">
-        <div id="displayEmail" class="user-email hidden"></div>
-        <button id="settingsBtn" class="btn hidden">Settings</button>
-        <button id="logoutBtn" class="btn hidden">Logout</button>
+      <!-- Requirement 1: Continue as Guest button under the Sign In form -->
+      <div style="margin-top:12px;">
+        <button id="continueGuestBtn">Continue as Guest</button>
+        <small style="display:block; margin-top:6px; color:#666;">
+          Guests can chat temporarily. Session is cleared when you close the tab. Saving chat history is disabled.
+        </small>
       </div>
-    </div>
+    </section>
 
-    <div id="chat" aria-live="polite"></div>
-
-    <div class="input-area">
-      <input type="text" id="userInput" placeholder="Ask something..." />
-      <!-- Ensure button is type=button so it won't try to submit forms -->
-      <button id="sendBtn" type="button" class="send-btn">Send</button>
-    </div>
-  </div>
-
-  <!-- AUTH PANEL (shows before chat when not logged in) -->
-  <div id="authPanel" class="auth-panel hidden" role="dialog" aria-modal="true">
-    <div class="auth-card">
-      <div id="signInBox">
-        <h2>Sign In</h2>
-        <form id="signInForm">
-          <div class="form-group">
-            <label for="signinEmail">Email</label>
-            <input id="signinEmail" type="email" required />
-          </div>
-          <div class="form-group">
-            <label for="signinPassword">Password</label>
-            <input id="signinPassword" type="password" required />
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn primary">Sign In</button>
-          </div>
-
-          <div style="margin-top:12px;">
-            <button type="button" id="continueGuestBtn" class="guest-btn">Continue as Guest</button>
-            <div id="signinError" style="color:#ff8b8b;margin-top:8px;"></div>
-          </div>
-        </form>
+    <section id="chat" style="display:none;">
+      <h3>AI Chat</h3>
+      <div id="chatMessages" style="min-height:160px; border:1px solid #f0f0f0; padding:8px; margin-bottom:8px; overflow:auto;"></div>
+      <input id="chatInput" placeholder="Type a message..." style="width:100%; padding:8px;" />
+      <div style="margin-top:8px;">
+        <button id="sendBtn">Send</button>
+        <!-- Save chat history button; will be disabled for guest users -->
+        <button id="saveChatBtn">Save Chat</button>
       </div>
-    </div>
-  </div>
+    </section>
 
-  <!-- Scripts: auth first so chat.js can check session/capabilities -->
+  </main>
+
   <script src="auth.js"></script>
-  <script src="auth-debug.js"></script>
-  <script src="chat.js"></script>
+  <script>
+    // UI integration with Auth
+    document.addEventListener('DOMContentLoaded', () => {
+      const signInBtn = document.getElementById('signInBtn');
+      const createAccountBtn = document.getElementById('createAccountBtn');
+      const continueGuestBtn = document.getElementById('continueGuestBtn');
+      const emailInput = document.getElementById('emailInput');
+      const passwordInput = document.getElementById('passwordInput');
+
+      const userDisplay = document.getElementById('userDisplay');
+      const authSection = document.getElementById('authSection');
+      const chatSection = document.getElementById('chat');
+      const sendBtn = document.getElementById('sendBtn');
+      const saveChatBtn = document.getElementById('saveChatBtn');
+      const chatMessages = document.getElementById('chatMessages');
+      const chatInput = document.getElementById('chatInput');
+
+      function updateUIForAuth(user) {
+        if (!user) {
+          userDisplay.textContent = 'Not signed in';
+          authSection.style.display = 'block';
+          chatSection.style.display = 'none';
+        } else {
+          // Requirement 3: Display "Guest User" in the header when guest
+          if (user.guest) {
+            userDisplay.textContent = 'Guest User';
+          } else {
+            // For logged-in users show their email or name
+            userDisplay.textContent = user.email || user.name || 'Signed-in User';
+          }
+          // Allow chat access for both guest and logged-in users (Requirement 2)
+          authSection.style.display = 'none';
+          chatSection.style.display = 'block';
+        }
+
+        // Requirement 4: Disable saving chat history for guest users
+        if (Auth.canSaveHistory()) {
+          saveChatBtn.disabled = false;
+        } else {
+          saveChatBtn.disabled = true;
+        }
+      }
+
+      // Listen for auth changes
+      Auth.onAuthChange((user) => {
+        updateUIForAuth(user);
+      });
+
+      // Wire up actions
+      signInBtn.addEventListener('click', () => {
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+        if (!email || !password) {
+          alert('Please enter email and password.');
+          return;
+        }
+        signInBtn.disabled = true;
+        Auth.signIn(email, password)
+          .then(() => {
+            // successful sign-in -> UI updated via onAuthChange
+          })
+          .catch((err) => {
+            console.error(err);
+            alert('Sign-in failed. Check credentials.');
+          })
+          .finally(() => { signInBtn.disabled = false; });
+      });
+
+      createAccountBtn.addEventListener('click', () => {
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+        if (!email || !password) {
+          alert('Please enter email and password to create an account.');
+          return;
+        }
+        createAccountBtn.disabled = true;
+        Auth.createAccount(email, password)
+          .then(() => {})
+          .catch((err) => {
+            console.error(err);
+            alert('Account creation failed.');
+          })
+          .finally(() => { createAccountBtn.disabled = false; });
+      });
+
+      // Requirement 1 & 2: Continue as Guest flow
+      continueGuestBtn.addEventListener('click', () => {
+        continueGuestBtn.disabled = true;
+        Auth.continueAsGuest()
+          .then(() => {
+            // UI updated through onAuthChange handler
+            // Show ephemeral message
+            console.info('Entered guest mode.');
+          })
+          .finally(() => { continueGuestBtn.disabled = false; });
+      });
+
+      // Chat send - example only
+      sendBtn.addEventListener('click', () => {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        appendMessage('You', text);
+        chatInput.value = '';
+
+        // Simulate AI response
+        appendMessage('AI', 'Thinking...');
+        setTimeout(() => {
+          // replace the last AI "Thinking..." with a reply
+          const nodes = chatMessages.querySelectorAll('.msg');
+          const last = nodes[nodes.length - 1];
+          if (last) last.querySelector('.body').textContent = 'This is an AI response to: ' + text;
+        }, 800);
+      });
+
+      // Save chat history - only allowed for logged-in users
+      saveChatBtn.addEventListener('click', () => {
+        if (!Auth.canSaveHistory()) {
+          // Requirement 4: do not save for guest users
+          alert('Saving chat history is only available to logged-in users. Create an account or sign in to save.');
+          return;
+        }
+        // Implement saving chat to backend - example placeholder
+        const messages = Array.from(chatMessages.querySelectorAll('.msg')).map((m) => ({
+          author: m.dataset.author,
+          body: m.querySelector('.body').textContent
+        }));
+
+        fetch('/api/chats/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages })
+        })
+          .then((r) => {
+            if (!r.ok) throw new Error('Save failed');
+            return r.json();
+          })
+          .then(() => { alert('Chat saved'); })
+          .catch((err) => { console.error(err); alert('Failed to save chat.'); });
+      });
+
+      function appendMessage(author, body) {
+        const el = document.createElement('div');
+        el.className = 'msg';
+        el.dataset.author = author;
+        el.style.padding = '6px 0';
+        el.innerHTML = '<strong>' + author + ':</strong> <span class="body">' + body + '</span>';
+        chatMessages.appendChild(el);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      // Initialize UI based on current auth state (Auth.init runs on DOMContentLoaded in auth.js)
+      const initialUser = Auth.getCurrentUser();
+      updateUIForAuth(initialUser);
+    });
+  </script>
 </body>
 </html>
