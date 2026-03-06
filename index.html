@@ -5,10 +5,45 @@
   <title>Hymenoptera AI</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    /* Minimal styles for the example */
+    /* Updated header layout to center logo above the title in the middle */
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-    header { background:#222; color:#fff; padding: 12px 16px; display:flex; align-items:center; justify-content:space-between; }
-    #userDisplay { font-weight:600; }
+    header {
+      background:#222;
+      color:#fff;
+      padding: 12px 16px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr; /* left spacer, center title block, right user display */
+      align-items: center;
+      gap: 8px;
+      min-height: 64px;
+    }
+    .header-left { /* empty left area for spacing if needed */ }
+    .title-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      text-align: center;
+    }
+    #logoIcon {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      background: transparent; /* ensure no background if the asset is transparent */
+      display: block;
+    }
+    .site-title {
+      font-weight:700;
+      letter-spacing:1px;
+      text-transform:uppercase;
+      font-size: 16px;
+    }
+    #userDisplay {
+      justify-self: end;
+      font-weight:600;
+    }
+
     .container { padding: 16px; }
     .signin { max-width:360px; margin: 24px auto; border:1px solid #ddd; padding:16px; border-radius:6px; }
     .signin input { display:block; width:100%; margin:8px 0; padding:8px; }
@@ -19,9 +54,15 @@
 </head>
 <body>
   <header>
-    <div>
-      <strong>Hymenoptera AI</strong>
+    <div class="header-left"></div>
+
+    <!-- Centered title area with logo above the text (user requested "my hymenoptera without the background as an icon" shown above middle) -->
+    <div class="title-area" aria-hidden="false">
+      <!-- Place your transparent-background icon at assets/hymenoptera-icon.svg (or .png). -->
+      <img id="logoIcon" src="assets/hymenoptera-icon.svg" alt="Hymenoptera icon" />
+      <div class="site-title">HYMENOPTERA</div>
     </div>
+
     <div id="userDisplay">Not signed in</div>
   </header>
 
@@ -35,7 +76,7 @@
         <button id="createAccountBtn">Create Account</button>
       </div>
 
-      <!-- Requirement 1: Continue as Guest button under the Sign In form -->
+      <!-- Continue as Guest button -->
       <div style="margin-top:12px;">
         <button id="continueGuestBtn">Continue as Guest</button>
         <small style="display:block; margin-top:6px; color:#666;">
@@ -50,7 +91,6 @@
       <input id="chatInput" placeholder="Type a message..." style="width:100%; padding:8px;" />
       <div style="margin-top:8px;">
         <button id="sendBtn">Send</button>
-        <!-- Save chat history button; will be disabled for guest users -->
         <button id="saveChatBtn">Save Chat</button>
       </div>
     </section>
@@ -59,7 +99,7 @@
 
   <script src="auth.js"></script>
   <script>
-    // UI integration with Auth
+    // UI integration with Auth (same as before, guest-flow preserved)
     document.addEventListener('DOMContentLoaded', () => {
       const signInBtn = document.getElementById('signInBtn');
       const createAccountBtn = document.getElementById('createAccountBtn');
@@ -81,19 +121,15 @@
           authSection.style.display = 'block';
           chatSection.style.display = 'none';
         } else {
-          // Requirement 3: Display "Guest User" in the header when guest
           if (user.guest) {
             userDisplay.textContent = 'Guest User';
           } else {
-            // For logged-in users show their email or name
             userDisplay.textContent = user.email || user.name || 'Signed-in User';
           }
-          // Allow chat access for both guest and logged-in users (Requirement 2)
           authSection.style.display = 'none';
           chatSection.style.display = 'block';
         }
 
-        // Requirement 4: Disable saving chat history for guest users
         if (Auth.canSaveHistory()) {
           saveChatBtn.disabled = false;
         } else {
@@ -101,12 +137,10 @@
         }
       }
 
-      // Listen for auth changes
       Auth.onAuthChange((user) => {
         updateUIForAuth(user);
       });
 
-      // Wire up actions
       signInBtn.addEventListener('click', () => {
         const email = emailInput.value.trim();
         const password = passwordInput.value;
@@ -116,9 +150,6 @@
         }
         signInBtn.disabled = true;
         Auth.signIn(email, password)
-          .then(() => {
-            // successful sign-in -> UI updated via onAuthChange
-          })
           .catch((err) => {
             console.error(err);
             alert('Sign-in failed. Check credentials.');
@@ -135,7 +166,6 @@
         }
         createAccountBtn.disabled = true;
         Auth.createAccount(email, password)
-          .then(() => {})
           .catch((err) => {
             console.error(err);
             alert('Account creation failed.');
@@ -143,43 +173,33 @@
           .finally(() => { createAccountBtn.disabled = false; });
       });
 
-      // Requirement 1 & 2: Continue as Guest flow
       continueGuestBtn.addEventListener('click', () => {
         continueGuestBtn.disabled = true;
         Auth.continueAsGuest()
           .then(() => {
-            // UI updated through onAuthChange handler
-            // Show ephemeral message
             console.info('Entered guest mode.');
           })
           .finally(() => { continueGuestBtn.disabled = false; });
       });
 
-      // Chat send - example only
       sendBtn.addEventListener('click', () => {
         const text = chatInput.value.trim();
         if (!text) return;
         appendMessage('You', text);
         chatInput.value = '';
-
-        // Simulate AI response
         appendMessage('AI', 'Thinking...');
         setTimeout(() => {
-          // replace the last AI "Thinking..." with a reply
           const nodes = chatMessages.querySelectorAll('.msg');
           const last = nodes[nodes.length - 1];
           if (last) last.querySelector('.body').textContent = 'This is an AI response to: ' + text;
         }, 800);
       });
 
-      // Save chat history - only allowed for logged-in users
       saveChatBtn.addEventListener('click', () => {
         if (!Auth.canSaveHistory()) {
-          // Requirement 4: do not save for guest users
           alert('Saving chat history is only available to logged-in users. Create an account or sign in to save.');
           return;
         }
-        // Implement saving chat to backend - example placeholder
         const messages = Array.from(chatMessages.querySelectorAll('.msg')).map((m) => ({
           author: m.dataset.author,
           body: m.querySelector('.body').textContent
@@ -208,7 +228,6 @@
         chatMessages.scrollTop = chatMessages.scrollHeight;
       }
 
-      // Initialize UI based on current auth state (Auth.init runs on DOMContentLoaded in auth.js)
       const initialUser = Auth.getCurrentUser();
       updateUIForAuth(initialUser);
     });
