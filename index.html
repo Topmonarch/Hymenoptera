@@ -1,93 +1,185 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Hymenoptera</title>
-  <link rel="stylesheet" href="styles.css" />
-  <script defer src="chat.js"></script>
+
+<title>Hymenoptera</title>
+
+<style>
+
+body{
+background:#0b0f14;
+color:white;
+font-family:Arial;
+margin:0;
+}
+
+header{
+text-align:center;
+padding:15px;
+border-bottom:1px solid #222;
+}
+
+.logo{
+height:40px;
+}
+
+#chat-screen{
+display:none;
+flex-direction:column;
+height:100vh;
+}
+
+#messages{
+flex:1;
+overflow:auto;
+padding:20px;
+}
+
+.message{
+margin:10px 0;
+}
+
+.user{
+color:#4fc3f7;
+}
+
+.bot{
+color:#90ee90;
+}
+
+#input-area{
+display:flex;
+border-top:1px solid #333;
+}
+
+#message-input{
+flex:1;
+padding:12px;
+background:#111;
+color:white;
+border:none;
+}
+
+button{
+padding:12px;
+background:#1976d2;
+border:none;
+color:white;
+cursor:pointer;
+}
+
+#login-screen{
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+}
+
+.login-box{
+background:#111;
+padding:30px;
+border-radius:10px;
+width:300px;
+}
+
+</style>
+
 </head>
+
 <body>
-  <header class="app-header">
-    <!-- Logo centered above the title -->
-    <img src="logo.png" alt="Hymenoptera logo" class="logo" />
-    <h1 class="title">Hymenoptera</h1>
-  </header>
 
-  <div class="app">
-    <aside class="sidebar" aria-label="Sidebar">
-      <button id="newChatBtn" class="btn new-chat">+ New Chat</button>
-      <!-- Additional sidebar items could go here -->
-      <div class="sidebar-spacer" style="flex:1"></div>
-    </aside>
+<header>
+<img src="hymenoptera_logo_transparent.png" class="logo">
+<h2>HYMENOPTERA</h2>
+</header>
 
-    <main class="chat-wrapper" role="main">
-      <div id="chatContainer" class="chat-container hidden" aria-live="polite">
-        <div id="messages" class="messages" role="log" aria-live="polite"></div>
 
-        <form id="messageForm" class="message-form" onsubmit="event.preventDefault(); sendMessage();">
-          <textarea id="messageInput" class="message-input" placeholder="Type a message..." rows="1" aria-label="Message input"></textarea>
-          <button id="sendBtn" type="button" class="btn send" onclick="sendMessage()">Send</button>
-        </form>
-      </div>
+<div id="login-screen">
 
-      <div id="welcomeContainer" class="welcome-container">
-        <p>Welcome to Hymenoptera. Sign in, create an account, or continue as a guest to start chatting.</p>
-      </div>
-    </main>
-  </div>
+<div class="login-box">
 
-  <!-- Authentication overlay -->
-  <div id="authOverlay" class="auth-overlay">
-    <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="authTitle">
-      <h2 id="authTitle">Sign In</h2>
+<h3>Sign In</h3>
 
-      <div class="auth-tabs">
-        <button id="tabSignIn" class="tab active" type="button">Sign In</button>
-        <button id="tabSignUp" class="tab" type="button">Create Account</button>
-      </div>
+<input id="email" placeholder="Email"><br><br>
+<input id="password" type="password" placeholder="Password"><br><br>
 
-      <div id="signInForm" class="auth-form">
-        <label>
-          Email
-          <input id="signinEmail" type="email" placeholder="you@example.com" />
-        </label>
-        <label>
-          Password
-          <input id="signinPassword" type="password" placeholder="Password" />
-        </label>
-        <div class="auth-actions">
-          <button id="signInBtn" class="btn primary" type="button">Sign In</button>
-        </div>
-      </div>
+<button onclick="signIn()">Sign In</button>
 
-      <div id="signUpForm" class="auth-form hidden">
-        <label>
-          Name
-          <input id="signupName" type="text" placeholder="Your name" />
-        </label>
-        <label>
-          Email
-          <input id="signupEmail" type="email" placeholder="you@example.com" />
-        </label>
-        <label>
-          Password
-          <input id="signupPassword" type="password" placeholder="Password" />
-        </label>
-        <div class="auth-actions">
-          <button id="signUpBtn" class="btn primary" type="button">Create Account</button>
-        </div>
-      </div>
+<br><br>
 
-      <div class="auth-divider">or</div>
+<button onclick="continueAsGuest()">Continue as Guest</button>
 
-      <div class="auth-guest">
-        <button id="guestBtn" class="btn secondary" type="button">Continue as Guest</button>
-      </div>
+</div>
 
-      <button id="closeAuth" class="auth-close" aria-label="Close authentication" type="button">×</button>
-    </div>
-  </div>
+</div>
+
+
+<div id="chat-screen">
+
+<div id="messages"></div>
+
+<div id="input-area">
+
+<input id="message-input" placeholder="Ask something...">
+
+<button onclick="sendMessage()">Send</button>
+
+</div>
+
+</div>
+
+
+<script src="auth.js"></script>
+
+<script>
+
+async function sendMessage(){
+
+const input = document.getElementById("message-input");
+
+const message = input.value;
+
+if(!message) return;
+
+addMessage("user",message);
+
+input.value="";
+
+const response = await fetch("/api/chat",{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({message})
+
+});
+
+const data = await response.json();
+
+addMessage("bot",data.reply);
+
+}
+
+function addMessage(type,text){
+
+const container = document.getElementById("messages");
+
+const div = document.createElement("div");
+
+div.className = "message "+type;
+
+div.innerText = text;
+
+container.appendChild(div);
+
+container.scrollTop = container.scrollHeight;
+
+}
+
+</script>
 
 </body>
 </html>
