@@ -1,88 +1,181 @@
-// api/chat.js
-// Server handler for POST /api/chat
-// Expects JSON body: { messages: [{ role: 'user'|'assistant', content: '...' }, ...] }
+// chat.js
+// Handles sending messages to /api/chat for both guest and logged-in users.
+// Fixes:
+// - Send button triggers sendMessage()
+// - Pressing Enter sends the message
+// - POSTs { messages: [ { role: "user", content: messageText } ] } to /api/chat
+// - Displays assistant reply in the chat window
+// - Disables saving history for guest users (checks window.hymAuth.canSaveHistory())
 
-export default async function handler(req, res) {
-  try {
-    if (req.method !== 'POST') {
-      res.setHeader('Allow', 'POST');
-      return res.status(405).json({ error: 'Method not allowed' });
-    }
+(function () {
+  const userInput = document.getElementById('userInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const chatContainer = document.getElementById('chat');
+  const newChatBtn = document.getElementById('newChatBtn');
 
-    const body = req.body || {};
-    const messages = Array.isArray(body.messages) ? body.messages : [];
-
-    // Normalize conversation for the Responses API
-    const conversation = messages.map((m) => {
-      return { role: m.role, content: m.content };
-    });
-
-    if (!process.env.OPENAI_API_KEY) {
-      console.error('Missing OPENAI_API_KEY in environment');
-      return res.status(500).json({ error: 'Server misconfiguration: missing API key' });
-    }
-
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({ model: 'gpt-4o-mini', input: conversation, stream: false })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error('OpenAI API error:', data);
-      // Return the provider error message (but don't leak secret)
-      return res.status(response.status).json({ error: data });
-    }
-
-    // Try several ways to extract a readable assistant reply from Responses API
-    let reply = '';
-
-    // 1) Common top-level convenience field
-    if (typeof data.output_text === 'string' && data.output_text.trim()) {
-      reply = data.output_text.trim();
-    }
-
-    // 2) data.output array with content blocks
-    if (!reply && Array.isArray(data.output)) {
-      reply = data.output
-        .map((out) => {
-          if (typeof out === 'string') return out;
-          if (Array.isArray(out.content)) {
-            return out.content.map((c) => c.text || c.type === 'output_text' && c.text || '').join('');
-          }
-          return '';
-        })
-        .join('\n')
-        .trim();
-    }
-
-    // 3) older "choices" / chat-completion-like shapes
-    if (!reply && Array.isArray(data.choices) && data.choices.length > 0) {
-      const choice = data.choices[0];
-      if (choice.message && choice.message.content) {
-        if (Array.isArray(choice.message.content)) {
-          reply = choice.message.content.map((c) => c.text || '').join('').trim();
-        } else if (typeof choice.message.content === 'string') {
-          reply = choice.message.content.trim();
-        } else if (choice.message.content.parts) {
-          reply = choice.message.content.parts.join('').trim();
-        }
-      } else if (choice.text) {
-        reply = (choice.text || '').trim();
-      }
-    }
-
-    // Fallback: stringify whatever was returned (helps debugging)
-    if (!reply) reply = JSON.stringify(data);
-
-    return res.status(200).json({ reply });
-  } catch (err) {
-    console.error('Handler error:', err);
-    return res.status(500).json({ error: err?.message || String(err) });
+  if (!userInput || !sendBtn || !chatContainer) {
+    console.error('chat.js: missing required DOM elements.');
+    return;
   }
-}
+
+  // Append a message to the chat UI
+  function appendMessage(role, text) {
+    const el = document.createElement('div');
+    el.className = 'message ' + (role === 'user' ? 'user' : 'assistant');
+    // Keep newline-friendly text rendering
+    el.textContent = text;
+    chatContainer.appendChild(el);
+    // Scroll to bottom
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+
+  // Save a message to local history only if allowed
+  function saveMessageToHistory(msg) {
+    try {
+      if (!window.hymAuth || !window.hymAuth.canSaveHistory || !window.hymAuth.canSaveHistory()) {
+        // Do not save if no auth helper or if guest mode
+        return;
+      }
+      const key = 'hym_messages';
+      const raw = localStorage.getItem(key);
+      const arr = raw ? JSON.parse(raw) : [];
+      arr.push(msg);
+      localStorage.setItem(key, JSON.stringify(arr));
+    } catch (e) {
+      // Ignore storage errors to avoid breaking chat flow
+      console.warn('saveMessageToHistory error', e);
+    }
+  }
+
+  // Ensure there is a session (logged in or guest). If none, prompt for auth.
+  function ensureSessionOrPrompt() {
+    if (window.hymAuth) {
+      const loggedIn = window.hymAuth.isLoggedIn && window.hymAuth.isLoggedIn();
+      const guest = window.hymAuth.isGuest && window.hymAuth.isGuest();
+      if (loggedIn || guest) return true;
+      // show auth
+      if (window.hymAuth.requireAuth) window.hymAuth.requireAuth();
+      return false;
+    }
+    // If hymAuth is not available, allow sending but warn
+    return true;
+  }
+
+  // Send message to /api/chat
+  async function sendMessage() {
+    const text = (userInput.value || '').trim();
+    if (!text) return;
+
+    // Ensure user has a session (either authenticated or guest)
+    if (!ensureSessionOrPrompt()) return;
+
+    // Append user message locally
+    appendMessage('user', text);
+
+    // Save user message conditionally
+    saveMessageToHistory({ role: 'user', content: text });
+
+    // Clear input and disable controls while sending
+    userInput.value = '';
+    sendBtn.disabled = true;
+    userInput.disabled = true;
+
+    try {
+      const payload = {
+        messages: [
+          { role: 'user', content: text }
+        ]
+      };
+
+      const resp = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      let data;
+      try {
+        data = await resp.json();
+      } catch (e) {
+        // Non-JSON response
+        appendMessage('assistant', 'Error: Invalid response from server.');
+        return;
+      }
+
+      if (!resp.ok) {
+        // If the server returned an error shape, try to show it
+        const errMsg = (data && data.error) ? (data.error.message || JSON.stringify(data.error)) : 'Server error';
+        appendMessage('assistant', `Error: ${errMsg}`);
+        return;
+      }
+
+      // The backend returns { reply: assistantMessage }
+      const assistantText = (data && (data.reply || data.output_text)) ? (data.reply || data.output_text) : JSON.stringify(data);
+      appendMessage('assistant', assistantText);
+
+      // Save assistant reply conditionally
+      saveMessageToHistory({ role: 'assistant', content: assistantText });
+    } catch (err) {
+      appendMessage('assistant', 'Network error: ' + String(err));
+    } finally {
+      // Re-enable controls
+      sendBtn.disabled = false;
+      userInput.disabled = false;
+      userInput.focus();
+    }
+  }
+
+  // Wire up the send button
+  sendBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    sendMessage();
+  });
+
+  // Enter key sends message (Shift+Enter allows newline)
+  userInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // New Chat button clears the chat (only if session present)
+  if (newChatBtn) {
+    newChatBtn.addEventListener('click', function () {
+      if (!ensureSessionOrPrompt()) return;
+      // Clear the chat UI but do not persist for guest users
+      chatContainer.innerHTML = '';
+    });
+  }
+
+  // If page loads with a preexisting session (auth.js handles initial UI),
+  // enable or disable the input appropriately.
+  function refreshInputState() {
+    if (window.hymAuth) {
+      const loggedIn = window.hymAuth.isLoggedIn && window.hymAuth.isLoggedIn();
+      const guest = window.hymAuth.isGuest && window.hymAuth.isGuest();
+      if (loggedIn || guest) {
+        userInput.disabled = false;
+        sendBtn.disabled = false;
+      } else {
+        userInput.disabled = true;
+        sendBtn.disabled = true;
+      }
+    } else {
+      // If hymAuth isn't present, keep inputs enabled so chat can function.
+      userInput.disabled = false;
+      sendBtn.disabled = false;
+    }
+  }
+
+  // Run at startup
+  refreshInputState();
+
+  // If hymAuth is available, listen for possible external session changes by polling a short interval
+  // (simple approach when no event system is provided).
+  if (window.hymAuth) {
+    setInterval(refreshInputState, 1000);
+  }
+})();
