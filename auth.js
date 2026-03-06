@@ -253,12 +253,23 @@
     alert('You have been logged out.');
   });
 
-  settingsBtn.addEventListener('click', function () {
+  function openSettings() {
     const session = getSession();
-    if (!session || session.guest) return;
+    if (!session || session.guest) {
+      alert('Sign in to access Settings.');
+      return;
+    }
     // Simple settings placeholder
     alert(`Settings for ${session.email}\n\n(Placeholder)`);
-  });
+  }
+
+  settingsBtn.addEventListener('click', openSettings);
+
+  // Sidebar Settings button (always visible)
+  const sidebarSettingsBtn = document.getElementById('sidebarSettingsBtn');
+  if (sidebarSettingsBtn) {
+    sidebarSettingsBtn.addEventListener('click', openSettings);
+  }
 
   // Disable chat controls until authenticated (safety)
   userInput.disabled = true;

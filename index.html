@@ -117,15 +117,17 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
 </style>
 </head>
 <body>
-  <!-- Sidebar (kept minimal; removed chat history list and localStorage-based items) -->
+  <!-- Sidebar -->
   <div class="sidebar">
     <img src="hymenoptera_logo_transparent.png" alt="Hymenoptera" style="height:44px;width:44px;object-fit:contain;border-radius:8px;" />
     <div style="font-weight:800;color:#2D8CFF;letter-spacing:2px;">Hymenoptera</div>
     <button id="newChatBtn" class="new-chat">New Chat</button>
-    <!-- Chat list removed as requested -->
-    <div style="color:#777;font-size:13px;margin-top:10px;">
-      Chats are stored server-side (or in session) — chat history list removed from the UI.
+    <div style="color:#777;font-size:13px;margin-top:4px;">
+      Start a new conversation or continue chatting.
     </div>
+    <!-- Spacer pushes Settings to the bottom -->
+    <div style="flex:1;"></div>
+    <button id="sidebarSettingsBtn" class="btn" style="width:100%;text-align:left;">⚙ Settings</button>
   </div>
 
   <!-- Main area -->
