@@ -1,143 +1,54 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>HYMENOPTERA</title>
-
-<style>
-/* Basic reset and theme */
-* { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; }
-body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0c0c,#000000); color:white; }
-
-/* === LAYOUT === */
-.sidebar {
-  width: 260px;
-  background: linear-gradient(180deg, #0b0b0b 0%, #050505 100%);
-  border-right: 1px solid #1a1a1a;
-  display:flex;
-  flex-direction:column;
-  padding:15px;
-  gap:12px;
-}
-.new-chat {
-  background: #2D8CFF; border: none; padding: 12px; border-radius: 8px; font-weight: bold; color: black; cursor: pointer;
-}
-.main { flex: 1; display:flex; flex-direction:column; }
-
-/* Header */
-.header {
-  position: relative;
-  display:flex;
-  align-items:center;
-  justify-content:flex-end; /* keep user area on the right */
-  padding:16px 20px; border-bottom:1px solid #111;
-  min-height:72px;
-}
-
-/* Centered brand (logo above the title) */
-.center-brand {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  display:flex;
-  flex-direction: column;
-  align-items: center;
-  gap:8px;
-  text-align:center;
-}
-.center-brand img.logo-img {
-  width:64px;
-  height:64px;
-  object-fit:contain;
-  /* No background, no box, clean image only */
-  background: none;
-  padding: 0;
-  border: none;
-  box-shadow: none;
-  border-radius: 0;
-}
-.center-brand .title {
-  font-size:18px;
-  font-weight:800;
-  color:#2D8CFF;
-  letter-spacing:2px;
-  text-transform:uppercase;
-  text-shadow: 0 0 12px rgba(45,140,255,0.12);
-}
-
-/* User area (right) */
-.user-area { display:flex; align-items:center; gap:10px; color:#ddd; z-index:2; }
-.user-email { font-size:14px; color:#a7f; }
-.btn { background:#222; color:#ddd; border:1px solid #333; padding:8px 10px; border-radius:6px; cursor:pointer; }
-.btn.primary { background:#2D8CFF; color:black; border:none; }
-
-/* Chat area */
-#chat { flex:1; overflow-y:auto; padding:30px; display:flex; flex-direction:column; gap:15px; }
-.message { max-width:65%; padding:14px 18px; border-radius:14px; line-height:1.5; }
-.user { align-self:flex-end; background:#2D8CFF; color:black; }
-.assistant { align-self:flex-start; background:#111; border:1px solid #1a1a1a; color:white; }
-
-/* Input area */
-.input-area { padding:20px; border-top:1px solid #111; display:flex; gap:10px; }
-.input-area input[type="text"] { flex:1; padding:10px; border-radius:8px; border:1px solid #222; background:#0b0b0b; color:#fff; }
-.send-btn { padding:10px 14px; border-radius:8px; border:none; background:#2D8CFF; color:black; cursor:pointer; }
-
-/* === AUTH MODAL / PANEL === */
-.auth-panel {
-  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-  background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.8));
-  z-index:50;
-  padding:20px;
-}
-.auth-card {
-  width:420px; background:#0b0b0b; border-radius:10px; padding:20px; border:1px solid #222;
-  box-shadow: 0 6px 30px rgba(0,0,0,0.6);
-}
-.auth-card h2 { color:#2D8CFF; margin-bottom:12px; text-align:center; }
-.form-group { margin-bottom:12px; display:flex; flex-direction:column; gap:6px; }
-.form-group label { font-size:13px; color:#bbb; }
-.form-group input { padding:10px; border-radius:6px; border:1px solid #222; background:#0b0b0b; color:#fff; }
-.form-actions { display:flex; gap:8px; margin-top:8px; justify-content:space-between; align-items:center; }
-.form-toggle { font-size:13px; color:#9aa; cursor:pointer; text-decoration:underline; }
-
-.guest-note { font-size:13px; color:#9aa; margin-top:8px; text-align:center; }
-
-/* "Continue as Guest" button style */
-.guest-btn { width:100%; margin-top:10px; padding:10px; border-radius:8px; border:1px dashed #444; background:transparent; color:#ddd; cursor:pointer; }
-
-/* small helpers */
-.hidden { display:none; }
-
-/* Small responsiveness */
-@media (max-width:800px) {
-  .sidebar { display:none; }
-  .auth-card { width:92%; }
-  .center-brand img.logo-img { width:48px; height:48px; }
-}
-</style>
+  <meta charset="utf-8" />
+  <title>Hymenoptera</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { color-scheme: dark; }
+    body { margin:0; background:#060606; color:#ddd; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+    .main { max-width:1100px; margin:24px auto; padding:0 16px; }
+    .header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .center-brand { display:flex; align-items:center; gap:12px; }
+    .logo-img { width:56px; height:56px; display:block; }
+    .title { font-weight:800; color:#2D8CFF; letter-spacing:2px; font-size:18px; }
+    #chat { height:420px; background:#0b0b0b; border:1px solid #111; border-radius:8px; padding:18px; overflow:auto; margin-top:16px; display:flex; flex-direction:column; gap:12px; }
+    .input-area { padding:12px; border-top:1px solid #111; display:flex; gap:10px; margin-top:12px; align-items:center; }
+    .input-area input[type="text"] { flex:1; padding:10px; border-radius:8px; border:1px solid #222; background:#0b0b0b; color:#fff; }
+    .send-btn { padding:10px 14px; border-radius:8px; border:none; background:#2D8CFF; color:black; cursor:pointer; }
+    .hidden { display:none; }
+    .auth-panel {
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.8));
+      z-index:50;
+      padding:20px;
+    }
+    .auth-card { width:420px; background:#0b0b0b; border-radius:10px; padding:20px; border:1px solid #222; color:#ddd; }
+    /* Ensure auth panel does not block pointer events when hidden (defensive) */
+    .hidden.auth-panel { display:none; pointer-events:none; }
+  </style>
 </head>
 <body>
-  <!-- Sidebar (kept minimal; removed chat history list and localStorage-based items) -->
-  <div class="sidebar">
-    <div style="height:44px;width:44px;background:linear-gradient(90deg,#2D8CFF,#8A2BE2);border-radius:8px;"></div>
-    <div style="font-weight:800;color:#2D8CFF;letter-spacing:2px;">Hymenoptera</div>
-    <button id="newChatBtn" class="new-chat">New Chat</button>
-    <!-- Chat list removed as requested -->
-    <div style="color:#777;font-size:13px;margin-top:10px;">
-      Chats are stored server-side (or in session) — chat history list removed from the UI.
-    </div>
-  </div>
-
-  <!-- Main area -->
   <div class="main">
     <div class="header">
-      <!-- Centered logo above the title -->
       <div class="center-brand" aria-hidden="false">
-        <img src="logo-icon.png" alt="Hymenoptera logo" class="logo-img" />
-        <div class="title">HYMENOPTERA</div>
+        <!-- Inline SVG logo so logo always appears without external file -->
+        <svg class="logo-img" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hymenoptera logo">
+          <defs>
+            <linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#2D8CFF"/><stop offset="1" stop-color="#8A2BE2"/></linearGradient>
+          </defs>
+          <rect width="64" height="64" rx="10" fill="url(#lg)"/>
+          <g transform="translate(12,12)" fill="#fff" opacity="0.95">
+            <path d="M20 0C26 0 30 4 30 10s-4 10-10 10S10 16 10 10 14 0 20 0z"/>
+            <circle cx="20" cy="32" r="6"/>
+          </g>
+        </svg>
+        <div>
+          <div class="title">HYMENOPTERA</div>
+          <div style="font-size:12px;color:#aaa;">AI assistant</div>
+        </div>
       </div>
 
-      <!-- User area aligned to the right -->
       <div class="user-area" id="userArea">
         <div id="displayEmail" class="user-email hidden"></div>
         <button id="settingsBtn" class="btn hidden">Settings</button>
@@ -145,20 +56,18 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
       </div>
     </div>
 
-    <!-- Chat messages container -->
     <div id="chat" aria-live="polite"></div>
 
-    <!-- Input area -->
     <div class="input-area">
       <input type="text" id="userInput" placeholder="Ask something..." />
-      <button id="sendBtn" class="send-btn">Send</button>
+      <!-- Ensure button is type=button so it won't try to submit forms -->
+      <button id="sendBtn" type="button" class="send-btn">Send</button>
     </div>
   </div>
 
   <!-- AUTH PANEL (shows before chat when not logged in) -->
   <div id="authPanel" class="auth-panel hidden" role="dialog" aria-modal="true">
     <div class="auth-card">
-      <!-- Sign In form -->
       <div id="signInBox">
         <h2>Sign In</h2>
         <form id="signInForm">
@@ -172,38 +81,12 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
           </div>
           <div class="form-actions">
             <button type="submit" class="btn primary">Sign In</button>
-            <div class="form-toggle" id="showSignup">Create an account →</div>
           </div>
 
-          <!-- Continue as Guest -->
-          <button type="button" id="continueGuestBtn" class="guest-btn">Continue as Guest</button>
-          <div class="guest-note">Guest sessions are temporary and chat history will not be saved.</div>
-
-          <div id="signinError" style="color:#ff8b8b;margin-top:8px;"></div>
-        </form>
-      </div>
-
-      <!-- Sign Up form -->
-      <div id="signUpBox" class="hidden">
-        <h2>Create Account</h2>
-        <form id="signUpForm">
-          <div class="form-group">
-            <label for="signupEmail">Email</label>
-            <input id="signupEmail" type="email" required />
+          <div style="margin-top:12px;">
+            <button type="button" id="continueGuestBtn" class="guest-btn">Continue as Guest</button>
+            <div id="signinError" style="color:#ff8b8b;margin-top:8px;"></div>
           </div>
-          <div class="form-group">
-            <label for="signupPassword">Password</label>
-            <input id="signupPassword" type="password" required />
-          </div>
-          <div class="form-group">
-            <label for="signupConfirm">Confirm Password</label>
-            <input id="signupConfirm" type="password" required />
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn primary">Sign Up</button>
-            <div class="form-toggle" id="showSignin">Have an account? Sign in →</div>
-          </div>
-          <div id="signupError" style="color:#ff8b8b;margin-top:8px;"></div>
         </form>
       </div>
     </div>
@@ -211,6 +94,7 @@ body { display:flex; height:100vh; background:radial-gradient(circle at top,#0c0
 
   <!-- Scripts: auth first so chat.js can check session/capabilities -->
   <script src="auth.js"></script>
+  <script src="auth-debug.js"></script>
   <script src="chat.js"></script>
 </body>
 </html>
