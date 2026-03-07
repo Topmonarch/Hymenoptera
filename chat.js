@@ -24,6 +24,9 @@
   var DEFAULT_MODEL = 'smart';
   var currentModel = DEFAULT_MODEL;
 
+  // Hive Mode toggle
+  var hiveMode = false;
+
   var modelLabels = {
     fast: 'Fast',
     smart: 'Smart',
@@ -86,6 +89,19 @@
       indicator.textContent = 'Status: ' + text;
     }
   }
+
+  function updateHiveIndicator() {
+    var indicator = document.getElementById('hive-indicator');
+    if (indicator) {
+      indicator.textContent = 'Hive Mode: ' + (hiveMode ? 'ON' : 'OFF');
+      indicator.style.color = hiveMode ? '#2d8cff' : '#888';
+    }
+  }
+
+  window.toggleHiveMode = function () {
+    hiveMode = !hiveMode;
+    updateHiveIndicator();
+  };
 
   // Model dropdown toggle
   document.addEventListener('click', function (e) {
@@ -442,7 +458,7 @@
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel })
+        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel, hiveMode: hiveMode })
       });
 
       if (!response.ok) {
@@ -451,48 +467,58 @@
         return;
       }
 
-      // Read SSE stream
-      var reader = response.body.getReader();
-      var decoder = new TextDecoder();
-      var buffer = '';
+      if (hiveMode) {
+        // Hive mode returns a JSON response with the combined agent outputs
+        var data = await response.json();
+        assistantText = (data && data.content) ? data.content : NO_RESPONSE_MSG;
+        if (assistantBubble) {
+          assistantBubble.innerText = assistantText;
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+      } else {
+        // Read SSE stream
+        var reader = response.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
 
-      while (true) {
-        var result = await reader.read();
-        if (result.done) break;
-        buffer += decoder.decode(result.value, { stream: true });
+        while (true) {
+          var result = await reader.read();
+          if (result.done) break;
+          buffer += decoder.decode(result.value, { stream: true });
 
-        // Process complete SSE lines
-        var lines = buffer.split('\n');
-        buffer = lines.pop(); // hold incomplete last line
+          // Process complete SSE lines
+          var lines = buffer.split('\n');
+          buffer = lines.pop(); // hold incomplete last line
 
-        for (var i = 0; i < lines.length; i++) {
-          var line = lines[i].trim();
-          if (!line || line === 'data: [DONE]') continue;
-          if (line.startsWith('data: ')) {
-            try {
-              var parsed = JSON.parse(line.slice(6));
-              var delta = parsed.choices &&
-                          parsed.choices[0] &&
-                          parsed.choices[0].delta &&
-                          parsed.choices[0].delta.content;
-              if (delta) {
-                assistantText += delta;
-                if (assistantBubble) {
-                  assistantBubble.innerText = assistantText;
-                  messagesEl.scrollTop = messagesEl.scrollHeight;
+          for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (!line || line === 'data: [DONE]') continue;
+            if (line.startsWith('data: ')) {
+              try {
+                var parsed = JSON.parse(line.slice(6));
+                var delta = parsed.choices &&
+                            parsed.choices[0] &&
+                            parsed.choices[0].delta &&
+                            parsed.choices[0].delta.content;
+                if (delta) {
+                  assistantText += delta;
+                  if (assistantBubble) {
+                    assistantBubble.innerText = assistantText;
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                  }
                 }
+              } catch (e) {
+                // ignore malformed SSE chunks
               }
-            } catch (e) {
-              // ignore malformed SSE chunks
             }
           }
         }
-      }
 
-      // If no streaming content was captured, show fallback
-      if (!assistantText && assistantBubble) {
-        assistantBubble.innerText = NO_RESPONSE_MSG;
-        assistantText = NO_RESPONSE_MSG;
+        // If no streaming content was captured, show fallback
+        if (!assistantText && assistantBubble) {
+          assistantBubble.innerText = NO_RESPONSE_MSG;
+          assistantText = NO_RESPONSE_MSG;
+        }
       }
 
       // Append assistant reply to conversation memory so future messages retain full context.

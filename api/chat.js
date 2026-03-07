@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { messages, systemPrompt, agent, model } = req.body || {};
+    const { messages, systemPrompt, agent, model, hiveMode } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.setHeader('Content-Type', 'application/json');
@@ -29,16 +29,6 @@ module.exports = async function handler(req, res) {
       robotics: 'You are a robotics and automation engineering expert.'
     };
 
-    const resolvedSystemPrompt = systemPrompt || fallbackPrompts[agent] || fallbackPrompts.general;
-
-    // Build the full message list: system prompt first, then the complete conversation history.
-    // Placing the system prompt at position 0 ensures the agent persona is always in effect.
-    // The spread of messages sends every prior user + assistant turn so the AI remembers context.
-    const apiMessages = [
-      { role: 'system', content: resolvedSystemPrompt },
-      ...messages
-    ];
-
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       res.setHeader('Content-Type', 'application/json');
@@ -52,47 +42,110 @@ module.exports = async function handler(req, res) {
     };
     const selectedModel = modelMap[model] || 'gpt-4o';
 
-    // Send the full conversation history (system prompt + all prior turns) to OpenAI.
-    // This gives the model the complete context it needs to produce a coherent reply.
-    const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + apiKey
-      },
-      body: JSON.stringify({
-        model: selectedModel,
-        messages: apiMessages,
-        stream: true
-      })
-    });
+    if (!hiveMode) {
+      const resolvedSystemPrompt = systemPrompt || fallbackPrompts[agent] || fallbackPrompts.general;
 
-    if (!upstream.ok) {
-      let errorData;
-      try {
-        errorData = await upstream.json();
-      } catch (e) {
-        errorData = { error: { message: 'Upstream error' } };
+      // Build the full message list: system prompt first, then the complete conversation history.
+      // Placing the system prompt at position 0 ensures the agent persona is always in effect.
+      // The spread of messages sends every prior user + assistant turn so the AI remembers context.
+      const apiMessages = [
+        { role: 'system', content: resolvedSystemPrompt },
+        ...messages
+      ];
+
+      // Send the full conversation history (system prompt + all prior turns) to OpenAI.
+      // This gives the model the complete context it needs to produce a coherent reply.
+      const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages: apiMessages,
+          stream: true
+        })
+      });
+
+      if (!upstream.ok) {
+        let errorData;
+        try {
+          errorData = await upstream.json();
+        } catch (e) {
+          errorData = { error: { message: 'Upstream error' } };
+        }
+        res.setHeader('Content-Type', 'application/json');
+        return res.status(502).json({ error: (errorData && errorData.error) || { message: 'Upstream error' } });
       }
+
+      // Stream SSE events from OpenAI directly to the client
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('X-Accel-Buffering', 'no');
+
+      const reader = upstream.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(decoder.decode(value, { stream: true }));
+      }
+
+      res.end();
+    } else {
+      // Hive Mode: run multiple agents and combine their responses
+      const hiveAgents = {
+        research: 'You are a research specialist providing analytical insights.',
+        business: 'You are a business strategist providing startup and market advice.',
+        coding: 'You are a senior software engineer providing technical implementation.',
+        robotics: 'You are a robotics engineer providing automation and hardware ideas.'
+      };
+
+      const hiveAgentLabels = {
+        research: 'Research Agent',
+        business: 'Business Agent',
+        coding: 'Coding Agent',
+        robotics: 'Robotics Agent'
+      };
+
+      async function callAgent(agentName) {
+        const agentMessages = [
+          { role: 'system', content: hiveAgents[agentName] },
+          ...messages
+        ];
+        const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + apiKey
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: agentMessages,
+            stream: false
+          })
+        });
+        if (!upstream.ok) {
+          return '[Error from ' + hiveAgentLabels[agentName] + ': HTTP ' + upstream.status + ']';
+        }
+        const data = await upstream.json();
+        return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '[No response]';
+      }
+
+      const agentKeys = ['research', 'business', 'coding', 'robotics'];
+      const results = await Promise.allSettled(agentKeys.map(callAgent));
+
+      const combined = agentKeys.map(function (key, i) {
+        const result = results[i];
+        const text = result.status === 'fulfilled' ? result.value : '[Error from ' + hiveAgentLabels[key] + ']';
+        return hiveAgentLabels[key] + ':\n' + text;
+      }).join('\n\n');
+
       res.setHeader('Content-Type', 'application/json');
-      return res.status(502).json({ error: (errorData && errorData.error) || { message: 'Upstream error' } });
+      return res.status(200).json({ content: combined });
     }
-
-    // Stream SSE events from OpenAI directly to the client
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('X-Accel-Buffering', 'no');
-
-    const reader = upstream.body.getReader();
-    const decoder = new TextDecoder();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      res.write(decoder.decode(value, { stream: true }));
-    }
-
-    res.end();
   } catch (err) {
     console.error('api/chat error:', err);
     if (!res.headersSent) {
