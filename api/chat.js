@@ -12,7 +12,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { messages, agent } = req.body || {};
+    const { messages, agent, model } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: { message: 'messages array required' } });
@@ -36,6 +36,13 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: { message: 'API key not configured' } });
     }
 
+    const modelMap = {
+      fast: 'gpt-4o-mini',
+      smart: 'gpt-4o',
+      coding: 'gpt-4o'
+    };
+    const selectedModel = modelMap[model] || 'gpt-4o';
+
     const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
@@ -43,7 +50,7 @@ module.exports = async function handler(req, res) {
         'Authorization': 'Bearer ' + apiKey
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini',
+        model: selectedModel,
         input: apiMessages
       })
     });
