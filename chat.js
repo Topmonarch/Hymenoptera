@@ -19,6 +19,16 @@
   // Current agent selection
   var currentAgent = 'general';
 
+  // Current model selection
+  var DEFAULT_MODEL = 'smart';
+  var currentModel = DEFAULT_MODEL;
+
+  var modelLabels = {
+    fast: 'Fast',
+    smart: 'Smart',
+    coding: 'Coding'
+  };
+
   var agentLabels = {
     general: 'General AI',
     coding: 'Coding Agent',
@@ -36,6 +46,44 @@
       item.classList.toggle('active', item.dataset.agent === currentAgent);
     });
   }
+
+  function updateModelIndicator() {
+    var btn = document.getElementById('model-button');
+    if (btn) {
+      btn.textContent = modelLabels[currentModel] || 'Smart';
+    }
+    document.querySelectorAll('.model-option').forEach(function (opt) {
+      opt.classList.toggle('active', opt.dataset.model === currentModel);
+    });
+  }
+
+  // Model dropdown toggle
+  document.addEventListener('click', function (e) {
+    var btn = document.getElementById('model-button');
+    var dropdown = document.getElementById('model-dropdown');
+    if (!dropdown) return;
+    if (btn && btn.contains(e.target)) {
+      dropdown.classList.toggle('open');
+    } else {
+      dropdown.classList.remove('open');
+    }
+  });
+
+  // Model option selection
+  document.querySelectorAll('.model-option').forEach(function (opt) {
+    opt.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var selected = opt.dataset.model;
+      currentModel = selected;
+      if (currentChatId && conversations[currentChatId]) {
+        conversations[currentChatId].model = selected;
+        saveConversations();
+      }
+      updateModelIndicator();
+      var dropdown = document.getElementById('model-dropdown');
+      if (dropdown) dropdown.classList.remove('open');
+    });
+  });
 
   document.querySelectorAll('.agent-item').forEach(function (item) {
     item.onclick = function () {
@@ -64,6 +112,7 @@
           title: 'Chat ' + (index + 1),
           pinned: false,
           archived: false,
+          model: DEFAULT_MODEL,
           messages: conversations[id]
         };
       } else {
@@ -71,6 +120,7 @@
         if (conversations[id].pinned === undefined) conversations[id].pinned = false;
         if (conversations[id].archived === undefined) conversations[id].archived = false;
         if (!conversations[id].messages) conversations[id].messages = [];
+        if (!conversations[id].model) conversations[id].model = DEFAULT_MODEL;
       }
     });
   }());
@@ -239,6 +289,8 @@
   function loadChat(chatId) {
     currentChatId = chatId;
     var conv = conversations[chatId];
+    currentModel = (conv && conv.model) ? conv.model : DEFAULT_MODEL;
+    updateModelIndicator();
     var chatMessages = (conv && conv.messages) ? conv.messages : (Array.isArray(conv) ? conv : []);
     clearChatUI();
     chatMessages.forEach(function (msg) {
@@ -303,6 +355,7 @@
         title: 'Chat ' + chatCount,
         pinned: false,
         archived: false,
+        model: currentModel,
         messages: []
       };
       renderChatHistory();
@@ -319,7 +372,7 @@
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: currentAgent })
+        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: currentAgent, model: currentModel })
       });
 
       var data;
@@ -370,6 +423,7 @@
       title: 'Chat ' + chatCount,
       pinned: false,
       archived: false,
+      model: currentModel,
       messages: []
     };
     saveConversations();
