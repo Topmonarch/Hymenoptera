@@ -117,6 +117,10 @@
   document.querySelectorAll('.agent-item').forEach(function (item) {
     item.onclick = function () {
       currentAgent = item.dataset.agent;
+      if (currentChatId && conversations[currentChatId]) {
+        conversations[currentChatId].agent = currentAgent;
+        saveConversations();
+      }
       updateAgentIndicator();
     };
   });
@@ -141,6 +145,7 @@
           title: 'Chat ' + (index + 1),
           pinned: false,
           archived: false,
+          agent: 'general',
           model: DEFAULT_MODEL,
           messages: conversations[id]
         };
@@ -150,6 +155,7 @@
         if (conversations[id].archived === undefined) conversations[id].archived = false;
         if (!conversations[id].messages) conversations[id].messages = [];
         if (!conversations[id].model) conversations[id].model = DEFAULT_MODEL;
+        if (!conversations[id].agent) conversations[id].agent = 'general';
       }
     });
   }());
@@ -319,7 +325,9 @@
     currentChatId = chatId;
     var conv = conversations[chatId];
     currentModel = (conv && conv.model) ? conv.model : DEFAULT_MODEL;
+    currentAgent = (conv && conv.agent) ? conv.agent : 'general';
     updateModelIndicator();
+    updateAgentIndicator();
     var chatMessages = (conv && conv.messages) ? conv.messages : (Array.isArray(conv) ? conv : []);
 
     // Fade out, swap content, fade back in
@@ -406,6 +414,7 @@
         title: 'Chat ' + chatCount,
         pinned: false,
         archived: false,
+        agent: currentAgent,
         model: currentModel,
         messages: []
       };
@@ -425,10 +434,12 @@
     var assistantText = '';
 
     try {
+      var convAgent = conversations[currentChatId].agent || currentAgent;
+      var convModel = conversations[currentChatId].model || currentModel;
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: currentAgent, systemPrompt: agents[currentAgent].systemPrompt, model: currentModel })
+        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel })
       });
 
       if (!response.ok) {
@@ -516,6 +527,7 @@
       title: 'Chat ' + chatCount,
       pinned: false,
       archived: false,
+      agent: currentAgent,
       model: currentModel,
       messages: []
     };
