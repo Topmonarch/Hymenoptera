@@ -194,10 +194,106 @@
       font-weight: 600;
     }
 
-    /* ===== AGENT INDICATOR ===== */
+    /* ===== AGENT / STATUS INDICATOR ===== */
     #agent-indicator {
       font-size: 12px;
       color: #888;
+    }
+
+    #status-indicator {
+      font-size: 12px;
+      color: #888;
+    }
+
+    /* ===== MESSAGE FADE-IN ===== */
+    .message {
+      animation: msg-fade-in 0.2s ease;
+    }
+
+    @keyframes msg-fade-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===== CHAT AREA FADE TRANSITION ===== */
+    #messages {
+      transition: opacity 0.15s ease;
+    }
+
+    #messages.fading {
+      opacity: 0;
+    }
+
+    /* ===== COMMAND PALETTE ===== */
+    .command-palette {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 18vh;
+    }
+
+    .command-palette.hidden {
+      display: none;
+    }
+
+    .command-palette-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+    }
+
+    .command-palette-panel {
+      position: relative;
+      background: #1a2030;
+      border: 1px solid #2a3040;
+      border-radius: 8px;
+      width: 480px;
+      max-width: 90vw;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+      animation: palette-drop-in 0.15s ease;
+    }
+
+    @keyframes palette-drop-in {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .command-input {
+      width: 100%;
+      padding: 14px 16px;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #2a3040;
+      color: white;
+      font-size: 14px;
+      outline: none;
+      font-family: Arial, sans-serif;
+    }
+
+    .command-input::placeholder {
+      color: #555;
+    }
+
+    .command-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .command-item {
+      padding: 11px 16px;
+      font-size: 13px;
+      color: #ccc;
+      cursor: pointer;
+    }
+
+    .command-item:hover,
+    .command-item.selected {
+      background: #222d3f;
+      color: white;
     }
 
     .chat-header-controls {
@@ -698,6 +794,8 @@
             <div class="model-option" data-model="coding">Coding</div>
           </div>
         </div>
+
+        <span id="status-indicator">Status: Ready</span>
       </div>
 
       <!-- Empty state: shown when no messages, hidden on first send, restored on New Chat -->
@@ -717,6 +815,15 @@
 
     </div>
 
+  </div>
+
+  <!-- Command Palette (Ctrl+K) -->
+  <div id="command-palette" class="command-palette hidden">
+    <div class="command-palette-backdrop"></div>
+    <div class="command-palette-panel">
+      <input type="text" id="command-input" class="command-input" placeholder="Type a command..." autocomplete="off" />
+      <div id="command-list" class="command-list"></div>
+    </div>
   </div>
 
   <script src="auth.js"></script>

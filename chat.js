@@ -1,5 +1,5 @@
 // chat.js
-// Frontend chat handler: POST to /api/chat, read data.reply, manage empty-state.
+// Frontend chat handler: POST to /api/chat (SSE stream), manage empty-state.
 // Maintains conversation memory in messages array.
 
 // Preserves hymAuth checks and saveMessageToHistory behavior.
@@ -37,6 +37,8 @@
     robotics: 'Robotics Agent'
   };
 
+  var NO_RESPONSE_MSG = 'No response received from server';
+
   function updateAgentIndicator() {
     var indicator = document.getElementById('agent-indicator');
     if (indicator) {
@@ -55,6 +57,13 @@
     document.querySelectorAll('.model-option').forEach(function (opt) {
       opt.classList.toggle('active', opt.dataset.model === currentModel);
     });
+  }
+
+  function setStatus(text) {
+    var indicator = document.getElementById('status-indicator');
+    if (indicator) {
+      indicator.textContent = 'Status: ' + text;
+    }
   }
 
   // Model dropdown toggle
@@ -292,11 +301,21 @@
     currentModel = (conv && conv.model) ? conv.model : DEFAULT_MODEL;
     updateModelIndicator();
     var chatMessages = (conv && conv.messages) ? conv.messages : (Array.isArray(conv) ? conv : []);
-    clearChatUI();
-    chatMessages.forEach(function (msg) {
-      addMessage(msg.role, msg.content);
-    });
-    renderChatHistory();
+
+    // Fade out, swap content, fade back in
+    if (messagesEl) {
+      messagesEl.classList.add('fading');
+    }
+    setTimeout(function () {
+      clearChatUI();
+      chatMessages.forEach(function (msg) {
+        addMessage(msg.role, msg.content);
+      });
+      renderChatHistory();
+      if (messagesEl) {
+        messagesEl.classList.remove('fading');
+      }
+    }, 150);
   }
 
 
@@ -340,6 +359,18 @@
   // Expose addMessage globally for any callers
   window.addMessage = addMessage;
 
+  // Create an empty streaming assistant bubble and return the element
+  function createStreamingBubble() {
+    if (!messagesEl) return null;
+    hideEmptyState();
+    var div = document.createElement('div');
+    div.className = 'message assistant';
+    div.innerText = '';
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+  }
+
   async function sendMessage() {
     if (!messageInput) return;
     var message = (messageInput.value || '').trim();
@@ -368,6 +399,11 @@
     saveConversations();
     messageInput.value = '';
 
+    // Show thinking status and create empty assistant bubble
+    setStatus('Thinking...');
+    var assistantBubble = createStreamingBubble();
+    var assistantText = '';
+
     try {
       var response = await fetch('/api/chat', {
         method: 'POST',
@@ -375,30 +411,67 @@
         body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: currentAgent, model: currentModel })
       });
 
-      var data;
-      try {
-        data = await response.json();
-      } catch (e) {
-        addMessage('assistant', 'Error contacting AI server');
-        return;
-      }
-
       if (!response.ok) {
-        addMessage('assistant', 'Error contacting AI server');
+        if (assistantBubble) assistantBubble.innerText = 'Error contacting AI server';
+        setStatus('Ready');
         return;
       }
 
-      // api/chat always returns { reply: assistantText }
-      var reply = data.reply || 'No response received from server';
-      // Add assistant reply to conversation
-      conversations[currentChatId].messages.push({ role: 'assistant', content: reply });
-      addMessage('assistant', reply);
-      saveMessageToHistory({ role: 'assistant', content: reply });
+      // Read SSE stream
+      var reader = response.body.getReader();
+      var decoder = new TextDecoder();
+      var buffer = '';
+
+      while (true) {
+        var result = await reader.read();
+        if (result.done) break;
+        buffer += decoder.decode(result.value, { stream: true });
+
+        // Process complete SSE lines
+        var lines = buffer.split('\n');
+        buffer = lines.pop(); // hold incomplete last line
+
+        for (var i = 0; i < lines.length; i++) {
+          var line = lines[i].trim();
+          if (!line || line === 'data: [DONE]') continue;
+          if (line.startsWith('data: ')) {
+            try {
+              var parsed = JSON.parse(line.slice(6));
+              var delta = parsed.choices &&
+                          parsed.choices[0] &&
+                          parsed.choices[0].delta &&
+                          parsed.choices[0].delta.content;
+              if (delta) {
+                assistantText += delta;
+                if (assistantBubble) {
+                  assistantBubble.innerText = assistantText;
+                  messagesEl.scrollTop = messagesEl.scrollHeight;
+                }
+              }
+            } catch (e) {
+              // ignore malformed SSE chunks
+            }
+          }
+        }
+      }
+
+      // If no streaming content was captured, show fallback
+      if (!assistantText && assistantBubble) {
+        assistantBubble.innerText = NO_RESPONSE_MSG;
+        assistantText = NO_RESPONSE_MSG;
+      }
+
+      // Persist the completed assistant message
+      conversations[currentChatId].messages.push({ role: 'assistant', content: assistantText });
+      saveMessageToHistory({ role: 'assistant', content: assistantText });
       saveConversations();
     } catch (err) {
       console.error('sendMessage error:', err);
-      addMessage('assistant', 'Error contacting AI server');
+      if (assistantBubble) assistantBubble.innerText = 'Error contacting AI server';
     }
+
+    setStatus('Ready');
+    if (messageInput) messageInput.focus();
   }
 
   // Expose sendMessage globally so onclick="sendMessage()" works
@@ -449,6 +522,100 @@
       }
     });
   }
+
+  // ===== COMMAND PALETTE =====
+
+  function makeSwitchAgentCmd(agentKey) {
+    return {
+      label: 'Switch Agent: ' + agentLabels[agentKey],
+      action: function () { currentAgent = agentKey; updateAgentIndicator(); }
+    };
+  }
+
+  var COMMANDS = [
+    { label: 'New Chat',     action: function () { window.newChat(); } },
+    makeSwitchAgentCmd('general'),
+    makeSwitchAgentCmd('coding'),
+    makeSwitchAgentCmd('research'),
+    makeSwitchAgentCmd('business'),
+    makeSwitchAgentCmd('robotics'),
+    { label: 'Rename Chat',  action: function () { if (currentChatId) renameChat(currentChatId); } },
+    { label: 'Archive Chat', action: function () { if (currentChatId) archiveChat(currentChatId); } },
+    { label: 'Delete Chat',  action: function () { if (currentChatId) deleteChat(currentChatId); } }
+  ];
+
+  function renderCommandList(filter) {
+    var list = document.getElementById('command-list');
+    if (!list) return;
+    list.innerHTML = '';
+    var filtered = filter
+      ? COMMANDS.filter(function (c) { return c.label.toLowerCase().indexOf(filter.toLowerCase()) !== -1; })
+      : COMMANDS;
+    filtered.forEach(function (cmd) {
+      var div = document.createElement('div');
+      div.className = 'command-item';
+      div.textContent = cmd.label;
+      div.onclick = function () {
+        closeCommandPalette();
+        cmd.action();
+      };
+      list.appendChild(div);
+    });
+  }
+
+  function openCommandPalette() {
+    var palette = document.getElementById('command-palette');
+    if (!palette) return;
+    palette.classList.remove('hidden');
+    var input = document.getElementById('command-input');
+    if (input) {
+      input.value = '';
+      renderCommandList('');
+      input.focus();
+    }
+  }
+
+  function closeCommandPalette() {
+    var palette = document.getElementById('command-palette');
+    if (palette) palette.classList.add('hidden');
+  }
+
+  // Command input filtering
+  var commandInputEl = document.getElementById('command-input');
+  if (commandInputEl) {
+    commandInputEl.addEventListener('input', function () {
+      renderCommandList(this.value);
+    });
+    commandInputEl.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closeCommandPalette();
+      }
+    });
+  }
+
+  // Close palette when clicking the backdrop
+  var paletteEl = document.getElementById('command-palette');
+  if (paletteEl) {
+    paletteEl.addEventListener('click', function (e) {
+      if (e.target === paletteEl || e.target.classList.contains('command-palette-backdrop')) {
+        closeCommandPalette();
+      }
+    });
+  }
+
+  // Ctrl+K opens command palette; Escape closes it
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey && e.key === 'k') {
+      e.preventDefault();
+      openCommandPalette();
+    } else if (e.key === 'Escape') {
+      closeCommandPalette();
+    }
+  });
+
+  // Expose openCommandPalette globally if needed
+  window.openCommandPalette = openCommandPalette;
 
   // On page load: render chat history and restore the most recent non-archived conversation
   window.addEventListener('load', function () {
