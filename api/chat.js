@@ -1,6 +1,8 @@
 // api/chat.js — Vercel serverless handler for /api/chat
 
-// Accepts POST { messages: [...], agent, model }.
+// Accepts POST { messages: [...], agent, systemPrompt, model }.
+// messages contains the full conversation history (user + assistant turns).
+// The system prompt is prepended so the agent persona is applied on every request.
 // Streams the OpenAI Chat Completions response back as Server-Sent Events (SSE).
 // Each SSE event is forwarded directly from OpenAI.
 // On early errors (before streaming begins): returns JSON { error: { message } }.
@@ -29,6 +31,9 @@ module.exports = async function handler(req, res) {
 
     const resolvedSystemPrompt = systemPrompt || fallbackPrompts[agent] || fallbackPrompts.general;
 
+    // Build the full message list: system prompt first, then the complete conversation history.
+    // Placing the system prompt at position 0 ensures the agent persona is always in effect.
+    // The spread of messages sends every prior user + assistant turn so the AI remembers context.
     const apiMessages = [
       { role: 'system', content: resolvedSystemPrompt },
       ...messages
@@ -47,6 +52,8 @@ module.exports = async function handler(req, res) {
     };
     const selectedModel = modelMap[model] || 'gpt-4o';
 
+    // Send the full conversation history (system prompt + all prior turns) to OpenAI.
+    // This gives the model the complete context it needs to produce a coherent reply.
     const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {

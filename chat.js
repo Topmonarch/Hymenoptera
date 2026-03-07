@@ -12,7 +12,8 @@
   var messageInput = document.getElementById('message-input');
   var emptyState = document.getElementById('empty-state');
 
-  // Multi-conversation storage
+  // Conversation memory: each chat stores its full message history in conversations[id].messages.
+  // When a message is sent, the entire history is forwarded to the backend so the AI maintains context.
   var conversations = {};
   var currentChatId = null;
 
@@ -421,7 +422,8 @@
       renderChatHistory();
     }
 
-    // Add user message to conversation
+    // Append user message to conversation memory before sending.
+    // The full history (all prior messages + this new one) will be sent to the backend.
     conversations[currentChatId].messages.push({ role: 'user', content: message });
     addMessage('user', message);
     saveMessageToHistory({ role: 'user', content: message });
@@ -436,6 +438,7 @@
     try {
       var convAgent = conversations[currentChatId].agent || currentAgent;
       var convModel = conversations[currentChatId].model || currentModel;
+      // Send the full conversation history to the backend so the AI remembers all prior messages.
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -492,7 +495,7 @@
         assistantText = NO_RESPONSE_MSG;
       }
 
-      // Persist the completed assistant message
+      // Append assistant reply to conversation memory so future messages retain full context.
       conversations[currentChatId].messages.push({ role: 'assistant', content: assistantText });
       saveMessageToHistory({ role: 'assistant', content: assistantText });
       saveConversations();
@@ -515,7 +518,8 @@
     }
   };
 
-  // New chat: create a fresh conversation and update the sidebar
+  // New chat: create a fresh conversation and update the sidebar.
+  // Resets conversation memory by starting a new messages array for the new chat.
   window.newChat = function () {
     var user = localStorage.getItem('hymenoptera_user');
     if (!user) return;
@@ -529,7 +533,7 @@
       archived: false,
       agent: currentAgent,
       model: currentModel,
-      messages: []
+      messages: [] // Fresh memory: no prior messages for the new conversation
     };
     saveConversations();
     clearChatUI();
