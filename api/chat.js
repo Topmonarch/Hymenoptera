@@ -1,13 +1,13 @@
 // api/chat.js — Vercel serverless handler for /api/chat
 
-// Accepts POST { messages: [...] }, calls OpenAI Responses API.
-// Always returns JSON. On success: { reply: assistantText }
-// On error: { error: { message: string } }
+// Accepts POST { messages: [...], agent, model }.
+// Streams the OpenAI Chat Completions response back as Server-Sent Events (SSE).
+// Each SSE event is forwarded directly from OpenAI.
+// On early errors (before streaming begins): returns JSON { error: { message } }.
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Content-Type', 'application/json');
-
   if (req.method !== 'POST') {
+    res.setHeader('Content-Type', 'application/json');
     return res.status(405).json({ error: { message: 'Method not allowed' } });
   }
 
@@ -15,6 +15,7 @@ module.exports = async function handler(req, res) {
     const { messages, agent, model } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      res.setHeader('Content-Type', 'application/json');
       return res.status(400).json({ error: { message: 'messages array required' } });
     }
 
@@ -33,6 +34,7 @@ module.exports = async function handler(req, res) {
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
+      res.setHeader('Content-Type', 'application/json');
       return res.status(500).json({ error: { message: 'API key not configured' } });
     }
 
@@ -43,7 +45,7 @@ module.exports = async function handler(req, res) {
     };
     const selectedModel = modelMap[model] || 'gpt-4o';
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -51,50 +53,47 @@ module.exports = async function handler(req, res) {
       },
       body: JSON.stringify({
         model: selectedModel,
-        input: apiMessages
+        messages: apiMessages,
+        stream: true
       })
     });
 
-    let openaiData;
-    try {
-      openaiData = await response.json();
-    } catch (e) {
-      return res.status(502).json({ error: { message: 'Invalid response from upstream' } });
-    }
-
-    if (!response.ok) {
-      const upstreamError = (openaiData && openaiData.error) ? openaiData.error : { message: 'Upstream error' };
-      return res.status(502).json({ error: upstreamError });
-    }
-
-    // Extract assistant text with multiple fallbacks:
-    // 1. output_text (Responses API convenience field)
-    // 2. output[].content (Responses API output array)
-    // 3. choices[].message.content (legacy Chat Completions fallback)
-    let assistantText;
-
-    if (openaiData.output_text) {
-      assistantText = openaiData.output_text;
-    } else if (Array.isArray(openaiData.output)) {
-      for (const item of openaiData.output) {
-        if (item && item.content) {
-          assistantText = Array.isArray(item.content)
-            ? item.content.map((c) => (c && c.text) ? c.text : String(c)).join('')
-            : String(item.content);
-          break;
-        }
+    if (!upstream.ok) {
+      let errorData;
+      try {
+        errorData = await upstream.json();
+      } catch (e) {
+        errorData = { error: { message: 'Upstream error' } };
       }
-    } else if (Array.isArray(openaiData.choices) && openaiData.choices[0] && openaiData.choices[0].message) {
-      assistantText = openaiData.choices[0].message.content;
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(502).json({ error: (errorData && errorData.error) || { message: 'Upstream error' } });
     }
 
-    if (!assistantText) {
-      return res.status(502).json({ error: { message: 'Unexpected response structure from upstream' } });
+    // Stream SSE events from OpenAI directly to the client
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const reader = upstream.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(decoder.decode(value, { stream: true }));
     }
 
-    return res.status(200).json({ reply: assistantText });
+    res.end();
   } catch (err) {
     console.error('api/chat error:', err);
-    return res.status(500).json({ error: { message: err.message || 'Internal server error' } });
+    if (!res.headersSent) {
+      res.setHeader('Content-Type', 'application/json');
+      const isNetworkError = err.cause || err.code || (err.message && err.message.includes('fetch'));
+      const message = isNetworkError
+        ? 'Failed to reach upstream AI service: ' + (err.message || 'network error')
+        : (err.message || 'Internal server error');
+      return res.status(500).json({ error: { message } });
+    }
+    res.end();
   }
 };
