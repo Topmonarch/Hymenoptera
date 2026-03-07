@@ -12,14 +12,14 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { messages, agent, model } = req.body || {};
+    const { messages, systemPrompt, agent, model } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.setHeader('Content-Type', 'application/json');
       return res.status(400).json({ error: { message: 'messages array required' } });
     }
 
-    const systemPrompts = {
+    const fallbackPrompts = {
       general: 'You are a helpful AI assistant.',
       coding: 'You are a professional software engineer that writes and explains code clearly.',
       research: 'You are an academic researcher who explains complex topics clearly.',
@@ -27,8 +27,10 @@ module.exports = async function handler(req, res) {
       robotics: 'You are a robotics and automation engineering expert.'
     };
 
+    const resolvedSystemPrompt = systemPrompt || fallbackPrompts[agent] || fallbackPrompts.general;
+
     const apiMessages = [
-      { role: 'system', content: systemPrompts[agent] || systemPrompts.general },
+      { role: 'system', content: resolvedSystemPrompt },
       ...messages
     ];
 

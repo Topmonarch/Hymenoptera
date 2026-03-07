@@ -29,12 +29,32 @@
     coding: 'Coding'
   };
 
-  var agentLabels = {
-    general: 'General AI',
-    coding: 'Coding Agent',
-    research: 'Research Agent',
-    business: 'Business Agent',
-    robotics: 'Robotics Agent'
+  var agents = {
+    general: {
+      name: 'General AI',
+      systemPrompt: 'You are a helpful AI assistant.',
+      tools: []
+    },
+    coding: {
+      name: 'Coding Agent',
+      systemPrompt: 'You are a professional software engineer who writes clean, correct code and explains programming clearly.',
+      tools: []
+    },
+    research: {
+      name: 'Research Agent',
+      systemPrompt: 'You specialize in research, summarizing topics, and explaining complex subjects clearly.',
+      tools: []
+    },
+    business: {
+      name: 'Business Agent',
+      systemPrompt: 'You provide startup ideas, business strategies, and market analysis.',
+      tools: []
+    },
+    robotics: {
+      name: 'Robotics Agent',
+      systemPrompt: 'You assist with robotics engineering, automation, sensors, and control systems.',
+      tools: []
+    }
   };
 
   var NO_RESPONSE_MSG = 'No response received from server';
@@ -42,7 +62,7 @@
   function updateAgentIndicator() {
     var indicator = document.getElementById('agent-indicator');
     if (indicator) {
-      indicator.textContent = 'Agent: ' + (agentLabels[currentAgent] || 'General AI');
+      indicator.textContent = 'Agent: ' + (agents[currentAgent] ? agents[currentAgent].name : 'General AI');
     }
     document.querySelectorAll('.agent-item').forEach(function (item) {
       item.classList.toggle('active', item.dataset.agent === currentAgent);
@@ -408,7 +428,7 @@
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: currentAgent, model: currentModel })
+        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: currentAgent, systemPrompt: agents[currentAgent].systemPrompt, model: currentModel })
       });
 
       if (!response.ok) {
@@ -527,7 +547,7 @@
 
   function makeSwitchAgentCmd(agentKey) {
     return {
-      label: 'Switch Agent: ' + agentLabels[agentKey],
+      label: 'Switch Agent: ' + agents[agentKey].name,
       action: function () { currentAgent = agentKey; updateAgentIndicator(); }
     };
   }
