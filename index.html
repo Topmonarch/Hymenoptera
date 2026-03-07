@@ -160,6 +160,50 @@
       color: white;
     }
 
+    /* ===== AGENTS SECTION ===== */
+    .agents-section {
+      border-top: 1px solid #1e2530;
+      padding-top: 10px;
+    }
+
+    .agents-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #666;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 0 4px 6px;
+    }
+
+    .agent-item {
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #aaa;
+    }
+
+    .agent-item:hover {
+      background: #1a2030;
+      color: white;
+    }
+
+    .agent-item.active {
+      background: #1a2d4a;
+      color: var(--accent-color);
+      font-weight: 600;
+    }
+
+    /* ===== AGENT INDICATOR ===== */
+    #agent-indicator {
+      padding: 6px 20px;
+      font-size: 12px;
+      color: #888;
+      border-bottom: 1px solid #1e2530;
+      background: #0e131a;
+      flex-shrink: 0;
+    }
+
     .sidebar-spacer {
       flex: 1;
     }
@@ -503,6 +547,15 @@
 
     <button class="new-chat-btn" onclick="newChat()">+ New Chat</button>
 
+    <div class="agents-section">
+      <div class="agents-title">Agents</div>
+      <div class="agent-item active" data-agent="general">General AI</div>
+      <div class="agent-item" data-agent="coding">Coding Agent</div>
+      <div class="agent-item" data-agent="research">Research Agent</div>
+      <div class="agent-item" data-agent="business">Business Agent</div>
+      <div class="agent-item" data-agent="robotics">Robotics Agent</div>
+    </div>
+
     <div id="chat-history"></div>
 
     <div class="sidebar-account">
@@ -566,6 +619,8 @@
 
     <!-- Chat Screen -->
     <div id="chat-screen">
+
+      <div id="agent-indicator">Agent: General AI</div>
 
       <!-- Empty state: shown when no messages, hidden on first send, restored on New Chat -->
       <div id="empty-state" class="empty-state">

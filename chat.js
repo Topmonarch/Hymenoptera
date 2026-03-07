@@ -16,6 +16,34 @@
   var conversations = {};
   var currentChatId = null;
 
+  // Current agent selection
+  var currentAgent = 'general';
+
+  var agentLabels = {
+    general: 'General AI',
+    coding: 'Coding Agent',
+    research: 'Research Agent',
+    business: 'Business Agent',
+    robotics: 'Robotics Agent'
+  };
+
+  function updateAgentIndicator() {
+    var indicator = document.getElementById('agent-indicator');
+    if (indicator) {
+      indicator.textContent = 'Agent: ' + (agentLabels[currentAgent] || 'General AI');
+    }
+    document.querySelectorAll('.agent-item').forEach(function (item) {
+      item.classList.toggle('active', item.dataset.agent === currentAgent);
+    });
+  }
+
+  document.querySelectorAll('.agent-item').forEach(function (item) {
+    item.onclick = function () {
+      currentAgent = item.dataset.agent;
+      updateAgentIndicator();
+    };
+  });
+
   // Load saved conversations from localStorage
   try {
     conversations = JSON.parse(localStorage.getItem('hymenoptera_conversations')) || {};
@@ -291,7 +319,7 @@
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversations[currentChatId].messages })
+        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: currentAgent })
       });
 
       var data;

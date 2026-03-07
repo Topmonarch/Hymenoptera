@@ -12,11 +12,24 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { messages } = req.body || {};
+    const { messages, agent } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: { message: 'messages array required' } });
     }
+
+    const systemPrompts = {
+      general: 'You are a helpful AI assistant.',
+      coding: 'You are a professional software engineer that writes and explains code clearly.',
+      research: 'You are an academic researcher who explains complex topics clearly.',
+      business: 'You are a startup strategist and marketing advisor.',
+      robotics: 'You are a robotics and automation engineering expert.'
+    };
+
+    const apiMessages = [
+      { role: 'system', content: systemPrompts[agent] || systemPrompts.general },
+      ...messages
+    ];
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -31,7 +44,7 @@ module.exports = async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'gpt-4.1-mini',
-        input: messages
+        input: apiMessages
       })
     });
 
