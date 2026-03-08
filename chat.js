@@ -30,6 +30,9 @@
   // Stores uploaded document text
   var uploadedFileContent = "";
 
+  // Stores captured or uploaded image (base64 data URL)
+  var uploadedImageData = "";
+
   var modelLabels = {
     fast: 'Fast',
     smart: 'Smart',
@@ -461,7 +464,7 @@
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel, hiveMode: hiveMode, fileContext: uploadedFileContent })
+        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel, hiveMode: hiveMode, fileContext: uploadedFileContent, image: uploadedImageData })
       });
 
       if (!response.ok) {
@@ -573,6 +576,10 @@
     if (fileUploadBtn) fileUploadBtn.title = 'Upload file';
     var fileInput = document.getElementById('file-upload');
     if (fileInput) fileInput.value = '';
+    // Clear uploaded image for the new conversation
+    uploadedImageData = '';
+    var camBtn = document.getElementById('camera-btn');
+    if (camBtn) camBtn.title = 'Upload image';
   };
 
   // Also wire up the send button via event listener
@@ -612,6 +619,76 @@
         if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
       };
       reader.readAsText(file);
+    });
+  }
+
+  // Camera / image input: open file picker for images, convert to base64
+  var cameraBtn = document.getElementById('camera-btn');
+  if (cameraBtn) {
+    cameraBtn.addEventListener('click', function () {
+      var input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/jpeg,image/png,image/webp';
+      input.onchange = function (event) {
+        var file = event.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          uploadedImageData = e.target.result;
+          cameraBtn.title = 'Image loaded: ' + file.name;
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    });
+  }
+
+  // Voice input: use Web Speech API to fill the chat input with spoken text
+  var recognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    ? new (window.SpeechRecognition || window.webkitSpeechRecognition)()
+    : null;
+
+  if (recognition) {
+    recognition.lang = 'en-US';
+
+    recognition.onresult = function (event) {
+      var transcript = event.results[0][0].transcript;
+      if (messageInput) messageInput.value = transcript;
+      updateVoiceIndicator(false);
+    };
+
+    recognition.onerror = function () {
+      updateVoiceIndicator(false);
+    };
+
+    recognition.onend = function () {
+      updateVoiceIndicator(false);
+    };
+  }
+
+  function updateVoiceIndicator(active) {
+    var voiceBtn = document.getElementById('voice-btn');
+    if (!voiceBtn) return;
+    if (active) {
+      voiceBtn.textContent = '🎤 Recording...';
+    } else {
+      voiceBtn.textContent = '🎤';
+    }
+  }
+
+  var voiceBtn = document.getElementById('voice-btn');
+  if (voiceBtn) {
+    voiceBtn.addEventListener('click', function () {
+      if (!recognition) {
+        alert('Speech recognition is not supported in this browser.');
+        return;
+      }
+      try {
+        recognition.start();
+        updateVoiceIndicator(true);
+      } catch (e) {
+        // recognition may already be running; ignore
+      }
     });
   }
 

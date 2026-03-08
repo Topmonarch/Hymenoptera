@@ -813,6 +813,8 @@
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}" />
         <input type="file" id="file-upload" accept=".txt,.md,.js,.py,.html,.css" style="display:none;" />
         <button id="file-upload-button" class="send-btn" onclick="document.getElementById('file-upload').click()" title="Upload file">📎</button>
+        <button id="camera-btn" class="send-btn" title="Upload image">📷</button>
+        <button id="voice-btn" class="send-btn" title="Voice input">🎤</button>
         <!-- send button text is white, glow remains blue -->
         <button class="send-btn glow" onclick="sendMessage()">Send</button>
       </div>
