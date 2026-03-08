@@ -622,13 +622,30 @@
     });
   }
 
-  // Camera / image input: open file picker for images, convert to base64
+  // Mobile detection: returns true for phones and tablets
+  function isMobileDevice() {
+    return /Android|iPhone|iPad|iPod|Tablet/i.test(navigator.userAgent);
+  }
+
+  // Show camera and voice buttons only on mobile devices
+  if (isMobileDevice()) {
+    var camBtnEl = document.getElementById('camera-btn');
+    var voiceBtnEl = document.getElementById('voice-btn');
+    if (camBtnEl) camBtnEl.style.display = 'inline-block';
+    if (voiceBtnEl) voiceBtnEl.style.display = 'inline-block';
+  }
+
+  // Camera / image input: open file picker for images (native camera on mobile), convert to base64
   var cameraBtn = document.getElementById('camera-btn');
   if (cameraBtn) {
     cameraBtn.addEventListener('click', function () {
       var input = document.createElement('input');
       input.type = 'file';
-      input.accept = 'image/jpeg,image/png,image/webp';
+      input.accept = 'image/*';
+      if (isMobileDevice()) {
+        // 'environment' opens the rear-facing camera on mobile devices
+        input.capture = 'environment';
+      }
       input.onchange = function (event) {
         var file = event.target.files[0];
         if (!file) return;
