@@ -965,4 +965,30 @@
 
   // Initialize the message counter display
   updateMessageCounter();
+
+  // Plan display
+  function updatePlanDisplay() {
+    var planDisplay = document.getElementById('plan-display');
+    var upgradeBtnEl = document.getElementById('upgrade-btn');
+    if (!planDisplay || !upgradeBtnEl) { return; }
+    var plan = userPlan || 'starter';
+
+    planDisplay.textContent = 'Plan: ' + plan.charAt(0).toUpperCase() + plan.slice(1);
+
+    if (plan === 'starter') {
+      upgradeBtnEl.style.display = 'block';
+      upgradeBtnEl.textContent = 'Upgrade Plan';
+    } else {
+      upgradeBtnEl.style.display = 'none';
+    }
+  }
+
+  var upgradeBtn = document.getElementById('upgrade-btn');
+  if (upgradeBtn) {
+    upgradeBtn.addEventListener('click', function () {
+      alert('Upgrade options coming soon.');
+    });
+  }
+
+  updatePlanDisplay();
 })();
