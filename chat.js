@@ -40,6 +40,21 @@
   var projects = {};
   var currentProject = 'Default';
 
+  // Subscription plan limits (messages per day)
+  var planLimits = {
+    starter: 30,
+    basic: 150,
+    premium: 500,
+    ultimate: Infinity
+  };
+
+  // Current user plan — defaults to 'starter' for all new users
+  var userPlan = localStorage.getItem('hymenoptera_plan') || 'starter';
+
+  // Daily message usage tracking
+  var messagesToday = Number(localStorage.getItem('messagesToday')) || 0;
+  var lastResetDate = localStorage.getItem('lastResetDate') || new Date().toDateString();
+
   var modelLabels = {
     fast: 'Fast',
     smart: 'Smart',
@@ -109,6 +124,16 @@
       indicator.textContent = 'Hive Mode: ' + (hiveMode ? 'ON' : 'OFF');
       indicator.style.color = hiveMode ? '#2d8cff' : '#888';
     }
+  }
+
+  function updateMessageCounter() {
+    var counter = document.getElementById('message-counter');
+    if (!counter) return;
+    var limit = planLimits[userPlan];
+    var text = limit === Infinity
+      ? messagesToday + ' / \u221e'
+      : messagesToday + ' / ' + limit;
+    counter.textContent = 'Messages Today: ' + text;
   }
 
   function updateWebIndicator() {
@@ -500,6 +525,23 @@
     var message = (messageInput.value || '').trim();
     if (!message) return;
 
+    // Daily reset: if the date has changed since last use, reset the counter
+    var today = new Date().toDateString();
+    if (today !== lastResetDate) {
+      messagesToday = 0;
+      lastResetDate = today;
+      localStorage.setItem('messagesToday', messagesToday);
+      localStorage.setItem('lastResetDate', lastResetDate);
+      updateMessageCounter();
+    }
+
+    // Check plan limit before sending
+    var limit = planLimits[userPlan];
+    if (messagesToday >= limit) {
+      alert('Daily message limit reached. Upgrade your plan or wait until tomorrow.');
+      return;
+    }
+
     // Ensure we have an active chat
     if (!currentChatId) {
       currentChatId = generateChatId();
@@ -534,6 +576,12 @@
     try {
       var convAgent = conversations[currentChatId].agent || currentAgent;
       var convModel = conversations[currentChatId].model || currentModel;
+
+      // Increment message count before sending the AI request
+      messagesToday++;
+      localStorage.setItem('messagesToday', messagesToday);
+      updateMessageCounter();
+
       // Send the full conversation history to the backend so the AI remembers all prior messages.
       var response = await fetch('/api/chat', {
         method: 'POST',
@@ -914,4 +962,7 @@
 
   // Show empty-state on initial load (if chat-screen is visible and no messages)
   showEmptyState();
+
+  // Initialize the message counter display
+  updateMessageCounter();
 })();
