@@ -7,6 +7,21 @@
 // Each SSE event is forwarded directly from OpenAI.
 // On early errors (before streaming begins): returns JSON { error: { message } }.
 
+async function webSearch(query) {
+  const url = 'https://api.duckduckgo.com/?q=' + encodeURIComponent(query) + '&format=json&no_redirect=1&no_html=1';
+  const response = await fetch(url);
+  if (!response.ok) {
+    return '';
+  }
+  let data;
+  try {
+    data = await response.json();
+  } catch (e) {
+    return '';
+  }
+  return (data && data.AbstractText) || '';
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Content-Type', 'application/json');
@@ -14,7 +29,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { messages, systemPrompt, agent, model, hiveMode, fileContext, image } = req.body || {};
+    const { messages, systemPrompt, agent, model, hiveMode, fileContext, image, webAccess } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.setHeader('Content-Type', 'application/json');
@@ -45,6 +60,19 @@ module.exports = async function handler(req, res) {
     if (!hiveMode) {
       const resolvedSystemPrompt = systemPrompt || fallbackPrompts[agent] || fallbackPrompts.general;
 
+      // Perform web search if webAccess is enabled and the Research Agent is active.
+      let webResults = '';
+      if (webAccess && agent === 'research') {
+        const latestUserMessage = messages[messages.length - 1] && messages[messages.length - 1].content;
+        if (latestUserMessage) {
+          try {
+            webResults = await webSearch(latestUserMessage);
+          } catch (e) {
+            // Web search failure is non-fatal; proceed without results
+          }
+        }
+      }
+
       // Build the full message list: system prompt first, then the complete conversation history.
       // Placing the system prompt at position 0 ensures the agent persona is always in effect.
       // The spread of messages sends every prior user + assistant turn so the AI remembers context.
@@ -52,6 +80,7 @@ module.exports = async function handler(req, res) {
         { role: 'system', content: resolvedSystemPrompt },
         ...(fileContext && fileContext.length > 0 ? [{ role: 'system', content: 'The following document was uploaded by the user. Use it as reference when answering:\n\n' + fileContext }] : []),
         ...(image ? [{ role: 'system', content: 'The user has uploaded an image. Analyze the image when responding.' }] : []),
+        ...(webResults ? [{ role: 'system', content: 'WEB SEARCH RESULTS:\n' + webResults }] : []),
         ...messages
       ];
 
@@ -112,11 +141,26 @@ module.exports = async function handler(req, res) {
         robotics: 'Robotics Agent'
       };
 
+      // When webAccess is enabled, have the Research Agent gather live web data
+      // and share those results with all hive agents.
+      let hiveWebResults = '';
+      if (webAccess) {
+        const latestUserMessage = messages[messages.length - 1] && messages[messages.length - 1].content;
+        if (latestUserMessage) {
+          try {
+            hiveWebResults = await webSearch(latestUserMessage);
+          } catch (e) {
+            // Web search failure is non-fatal; proceed without results
+          }
+        }
+      }
+
       async function callAgent(agentName) {
         const agentMessages = [
           { role: 'system', content: hiveAgents[agentName] },
           ...(fileContext && fileContext.length > 0 ? [{ role: 'system', content: 'The following document was uploaded by the user. Use it as reference when answering:\n\n' + fileContext }] : []),
           ...(image ? [{ role: 'system', content: 'The user has uploaded an image. Analyze the image when responding.' }] : []),
+          ...(hiveWebResults ? [{ role: 'system', content: 'The following web research results are available:\n' + hiveWebResults }] : []),
           ...messages
         ];
         const upstream = await fetch('https://api.openai.com/v1/chat/completions', {

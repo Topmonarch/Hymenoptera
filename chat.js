@@ -27,6 +27,9 @@
   // Hive Mode toggle
   var hiveMode = false;
 
+  // Web research toggle
+  var webAccess = false;
+
   // Stores uploaded document text
   var uploadedFileContent = "";
 
@@ -104,9 +107,22 @@
     }
   }
 
+  function updateWebIndicator() {
+    var indicator = document.getElementById('web-indicator');
+    if (indicator) {
+      indicator.textContent = 'Web: ' + (webAccess ? 'ON' : 'OFF');
+      indicator.style.color = webAccess ? '#2d8cff' : '#888';
+    }
+  }
+
   window.toggleHiveMode = function () {
     hiveMode = !hiveMode;
     updateHiveIndicator();
+  };
+
+  window.toggleWebAccess = function () {
+    webAccess = !webAccess;
+    updateWebIndicator();
   };
 
   // Model dropdown toggle
@@ -464,7 +480,7 @@
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel, hiveMode: hiveMode, fileContext: uploadedFileContent, image: uploadedImageData })
+        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel, hiveMode: hiveMode, fileContext: uploadedFileContent, image: uploadedImageData, webAccess: webAccess })
       });
 
       if (!response.ok) {
