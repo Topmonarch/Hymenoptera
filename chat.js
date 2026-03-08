@@ -27,6 +27,9 @@
   // Hive Mode toggle
   var hiveMode = false;
 
+  // Stores uploaded document text
+  var uploadedFileContent = "";
+
   var modelLabels = {
     fast: 'Fast',
     smart: 'Smart',
@@ -458,7 +461,7 @@
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel, hiveMode: hiveMode })
+        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel, hiveMode: hiveMode, fileContext: uploadedFileContent })
       });
 
       if (!response.ok) {
@@ -564,6 +567,12 @@
     saveConversations();
     clearChatUI();
     renderChatHistory();
+    // Clear uploaded file context for the new conversation
+    uploadedFileContent = '';
+    var fileUploadBtn = document.getElementById('file-upload-button');
+    if (fileUploadBtn) fileUploadBtn.title = 'Upload file';
+    var fileInput = document.getElementById('file-upload');
+    if (fileInput) fileInput.value = '';
   };
 
   // Also wire up the send button via event listener
@@ -582,6 +591,27 @@
         e.preventDefault();
         sendMessage();
       }
+    });
+  }
+
+  // File upload: read selected file text into uploadedFileContent
+  var fileUploadInput = document.getElementById('file-upload');
+  if (fileUploadInput) {
+    fileUploadInput.addEventListener('change', function (event) {
+      var file = event.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        uploadedFileContent = e.target.result;
+        var fileUploadBtn = document.getElementById('file-upload-button');
+        if (fileUploadBtn) fileUploadBtn.title = 'File loaded: ' + file.name;
+      };
+      reader.onerror = function () {
+        uploadedFileContent = '';
+        var fileUploadBtn = document.getElementById('file-upload-button');
+        if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
+      };
+      reader.readAsText(file);
     });
   }
 
