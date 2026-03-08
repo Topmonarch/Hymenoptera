@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { messages, systemPrompt, agent, model, hiveMode } = req.body || {};
+    const { messages, systemPrompt, agent, model, hiveMode, fileContext } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.setHeader('Content-Type', 'application/json');
@@ -50,6 +50,7 @@ module.exports = async function handler(req, res) {
       // The spread of messages sends every prior user + assistant turn so the AI remembers context.
       const apiMessages = [
         { role: 'system', content: resolvedSystemPrompt },
+        ...(fileContext && fileContext.length > 0 ? [{ role: 'system', content: 'The following document was uploaded by the user. Use it as reference when answering:\n\n' + fileContext }] : []),
         ...messages
       ];
 
@@ -113,6 +114,7 @@ module.exports = async function handler(req, res) {
       async function callAgent(agentName) {
         const agentMessages = [
           { role: 'system', content: hiveAgents[agentName] },
+          ...(fileContext && fileContext.length > 0 ? [{ role: 'system', content: 'The following document was uploaded by the user. Use it as reference when answering:\n\n' + fileContext }] : []),
           ...messages
         ];
         const upstream = await fetch('https://api.openai.com/v1/chat/completions', {

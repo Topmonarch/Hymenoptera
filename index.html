@@ -811,6 +811,8 @@
       <div id="input-area">
         <input id="message-input" placeholder="Ask something..."
           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}" />
+        <input type="file" id="file-upload" accept=".txt,.md,.js,.py,.html,.css" style="display:none;" />
+        <button id="file-upload-button" class="send-btn" onclick="document.getElementById('file-upload').click()" title="Upload file">📎</button>
         <!-- send button text is white, glow remains blue -->
         <button class="send-btn glow" onclick="sendMessage()">Send</button>
       </div>
