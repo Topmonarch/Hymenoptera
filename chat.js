@@ -36,6 +36,10 @@
   // Stores captured or uploaded image (base64 data URL)
   var uploadedImageData = "";
 
+  // Projects: containers for chats and files
+  var projects = {};
+  var currentProject = 'Default';
+
   var modelLabels = {
     fast: 'Fast',
     smart: 'Smart',
@@ -171,6 +175,16 @@
     conversations = {};
   }
 
+  // Load saved projects from localStorage
+  try {
+    projects = JSON.parse(localStorage.getItem('hymenoptera_projects')) || { 'Default': { files: [] } };
+  } catch (e) {
+    projects = { 'Default': { files: [] } };
+  }
+  if (!projects[currentProject]) {
+    projects[currentProject] = { files: [] };
+  }
+
   // Migrate old array-based conversations to the new metadata object format
   (function migrateConversations() {
     var ids = Object.keys(conversations).sort(function (a, b) {
@@ -186,6 +200,7 @@
           archived: false,
           agent: 'general',
           model: DEFAULT_MODEL,
+          project: 'Default',
           messages: conversations[id]
         };
       } else {
@@ -195,6 +210,7 @@
         if (!conversations[id].messages) conversations[id].messages = [];
         if (!conversations[id].model) conversations[id].model = DEFAULT_MODEL;
         if (!conversations[id].agent) conversations[id].agent = 'general';
+        if (!conversations[id].project) conversations[id].project = 'Default';
       }
     });
   }());
@@ -219,9 +235,50 @@
   function saveConversations() {
     try {
       localStorage.setItem('hymenoptera_conversations', JSON.stringify(conversations));
+      localStorage.setItem('hymenoptera_projects', JSON.stringify(projects));
     } catch (e) {
       console.warn('saveConversations error', e);
     }
+  }
+
+  function renderProjectList() {
+    var list = document.getElementById('project-list');
+    if (!list) return;
+    list.innerHTML = '';
+    Object.keys(projects).forEach(function (name) {
+      var item = document.createElement('div');
+      item.className = 'project-item' + (name === currentProject ? ' active' : '');
+      item.textContent = name;
+      item.onclick = function () { switchProject(name); };
+      list.appendChild(item);
+    });
+  }
+
+  function createAndSwitchProject(projectName) {
+    if (!projectName || !projectName.trim()) return;
+    projectName = projectName.trim();
+    if (projects[projectName]) {
+      alert('A project named "' + projectName + '" already exists. Switching to it.');
+    } else {
+      projects[projectName] = { files: [] };
+    }
+    currentProject = projectName;
+    saveConversations();
+    renderProjectList();
+    currentChatId = null;
+    clearChatUI();
+    renderChatHistory();
+  }
+
+  function switchProject(projectName) {
+    currentProject = projectName;
+    if (!projects[currentProject]) {
+      projects[currentProject] = { files: [] };
+    }
+    currentChatId = null;
+    clearChatUI();
+    renderChatHistory();
+    renderProjectList();
   }
 
   // Track the currently open chat options menu
@@ -316,9 +373,9 @@
     if (!history) return;
     history.innerHTML = '';
 
-    // Exclude archived chats; sort pinned to top, then by timestamp descending
+    // Exclude archived chats and chats not in the current project; sort pinned to top, then by timestamp descending
     var ids = Object.keys(conversations).filter(function (id) {
-      return !conversations[id].archived;
+      return !conversations[id].archived && conversations[id].project === currentProject;
     });
     ids.sort(function (a, b) {
       var pa = conversations[a].pinned ? 1 : 0;
@@ -447,7 +504,7 @@
     if (!currentChatId) {
       currentChatId = generateChatId();
       var chatCount = Object.keys(conversations).filter(function (id) {
-        return !conversations[id].archived;
+        return !conversations[id].archived && conversations[id].project === currentProject;
       }).length + 1;
       conversations[currentChatId] = {
         title: 'Chat ' + chatCount,
@@ -455,6 +512,7 @@
         archived: false,
         agent: currentAgent,
         model: currentModel,
+        project: currentProject,
         messages: []
       };
       renderChatHistory();
@@ -573,7 +631,7 @@
     if (!user) return;
     currentChatId = generateChatId();
     var chatCount = Object.keys(conversations).filter(function (id) {
-      return !conversations[id].archived;
+      return !conversations[id].archived && conversations[id].project === currentProject;
     }).length + 1;
     conversations[currentChatId] = {
       title: 'Chat ' + chatCount,
@@ -581,6 +639,7 @@
       archived: false,
       agent: currentAgent,
       model: currentModel,
+      project: currentProject,
       messages: [] // Fresh memory: no prior messages for the new conversation
     };
     saveConversations();
@@ -626,6 +685,10 @@
       var reader = new FileReader();
       reader.onload = function (e) {
         uploadedFileContent = e.target.result;
+        if (!projects[currentProject]) projects[currentProject] = { files: [] };
+        if (!projects[currentProject].files) projects[currentProject].files = [];
+        projects[currentProject].files.push(uploadedFileContent);
+        saveConversations();
         var fileUploadBtn = document.getElementById('file-upload-button');
         if (fileUploadBtn) fileUploadBtn.title = 'File loaded: ' + file.name;
       };
@@ -725,6 +788,15 @@
     });
   }
 
+  // New Project button
+  var newProjectBtn = document.getElementById('new-project-btn');
+  if (newProjectBtn) {
+    newProjectBtn.addEventListener('click', function () {
+      var projectName = prompt('Enter project name');
+      createAndSwitchProject(projectName);
+    });
+  }
+
   // ===== COMMAND PALETTE =====
 
   function makeSwitchAgentCmd(agentKey) {
@@ -736,6 +808,10 @@
 
   var COMMANDS = [
     { label: 'New Chat',     action: function () { window.newChat(); } },
+    { label: 'New Project',  action: function () {
+      var name = prompt('Enter project name');
+      createAndSwitchProject(name);
+    }},
     makeSwitchAgentCmd('general'),
     makeSwitchAgentCmd('coding'),
     makeSwitchAgentCmd('research'),
@@ -819,11 +895,12 @@
   // Expose openCommandPalette globally if needed
   window.openCommandPalette = openCommandPalette;
 
-  // On page load: render chat history and restore the most recent non-archived conversation
+  // On page load: render project list and chat history, restore the most recent non-archived conversation
   window.addEventListener('load', function () {
+    renderProjectList();
     renderChatHistory();
     var ids = Object.keys(conversations)
-      .filter(function (id) { return !conversations[id].archived; })
+      .filter(function (id) { return !conversations[id].archived && conversations[id].project === currentProject; })
       .sort(function (a, b) {
         // IDs are 'chat_TIMESTAMP_random'; sort by numeric timestamp portion
         var ta = parseInt(a.split('_')[1], 10) || 0;

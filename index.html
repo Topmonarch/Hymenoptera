@@ -400,6 +400,48 @@
       color: white;
     }
 
+    /* ===== PROJECTS SECTION ===== */
+    .projects-section {
+      border-bottom: 1px solid #1e2530;
+      padding-bottom: 8px;
+    }
+
+    .projects-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #666;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 0 4px 4px;
+    }
+
+    #project-list {
+      overflow-y: auto;
+      max-height: 110px;
+    }
+
+    .project-item {
+      padding: 7px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #aaa;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .project-item:hover {
+      background: #1a2030;
+      color: white;
+    }
+
+    .project-item.active {
+      background: #1a2d4a;
+      color: var(--accent-color);
+      font-weight: 600;
+    }
+
     /* ===== MAIN AREA ===== */
     .main {
       flex: 1;
@@ -714,6 +756,12 @@
     </div>
 
     <button class="new-chat-btn" onclick="newChat()">+ New Chat</button>
+
+    <div class="projects-section">
+      <div class="projects-title">Projects</div>
+      <div id="project-list"></div>
+      <button id="new-project-btn" class="sidebar-btn">+ New Project</button>
+    </div>
 
     <div class="agents-section">
       <div class="agents-title">Agents</div>
