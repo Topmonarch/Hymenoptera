@@ -992,9 +992,9 @@
 
   // Stripe payment links
   var stripeLinks = {
-    basic: "https://buy.stripe.com/test_dRm3co30K4Nra70b8ld7q00",
-    premium: "https://buy.stripe.com/test_aFa6oA6cWcfT2Ey7W9d7q01",
-    ultimate: "https://buy.stripe.com/test_4gM00catc7ZDengccpd7q02"
+    basic: "https://buy.stripe.com/dRm3co30K4Nra70b8ld7q00",
+    premium: "https://buy.stripe.com/aFa6oA6cWcfT2Ey7W9d7q01",
+    ultimate: "https://buy.stripe.com/4gM00catc7ZDengccpd7q02"
   };
 
   function openStripeCheckout(plan) {
