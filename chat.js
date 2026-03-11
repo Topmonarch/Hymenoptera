@@ -986,8 +986,39 @@
   var upgradeBtn = document.getElementById('upgrade-btn');
   if (upgradeBtn) {
     upgradeBtn.addEventListener('click', function () {
-      alert('Upgrade options coming soon.');
+      document.getElementById('upgrade-modal').classList.remove('hidden');
     });
+  }
+
+  // Stripe payment links
+  var stripeLinks = {
+    basic: "https://buy.stripe.com/test_dRm3co30K4Nra70b8ld7q00",
+    premium: "https://buy.stripe.com/test_aFa6oA6cWcfT2Ey7W9d7q01",
+    ultimate: "https://buy.stripe.com/test_4gM00catc7ZDengccpd7q02"
+  };
+
+  function openStripeCheckout(plan) {
+    var url = stripeLinks[plan];
+    if (!url) {
+      console.error("Stripe link not configured for plan:", plan);
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  var upgradeBasic = document.getElementById('upgrade-basic');
+  if (upgradeBasic) {
+    upgradeBasic.addEventListener('click', function () { openStripeCheckout('basic'); });
+  }
+
+  var upgradePremium = document.getElementById('upgrade-premium');
+  if (upgradePremium) {
+    upgradePremium.addEventListener('click', function () { openStripeCheckout('premium'); });
+  }
+
+  var upgradeUltimate = document.getElementById('upgrade-ultimate');
+  if (upgradeUltimate) {
+    upgradeUltimate.addEventListener('click', function () { openStripeCheckout('ultimate'); });
   }
 
   updatePlanDisplay();

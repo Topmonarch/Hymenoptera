@@ -898,6 +898,18 @@
 
   </div>
 
+  <!-- Upgrade Modal -->
+  <div id="upgrade-modal" class="command-palette hidden">
+    <div class="command-palette-backdrop" onclick="document.getElementById('upgrade-modal').classList.add('hidden')"></div>
+    <div class="command-palette-panel" style="padding:24px;">
+      <h3 style="margin:0 0 16px;color:#fff;font-size:15px;letter-spacing:1px;">Choose a Plan</h3>
+      <button id="upgrade-basic" class="sidebar-btn" style="margin-bottom:8px;">⚡ Upgrade to Basic</button>
+      <button id="upgrade-premium" class="sidebar-btn" style="margin-bottom:8px;">🚀 Upgrade to Premium</button>
+      <button id="upgrade-ultimate" class="sidebar-btn" style="margin-bottom:16px;">👑 Upgrade to Ultimate</button>
+      <button class="sidebar-btn" onclick="document.getElementById('upgrade-modal').classList.add('hidden')" style="color:#888;">Cancel</button>
+    </div>
+  </div>
+
   <!-- Command Palette (Ctrl+K) -->
   <div id="command-palette" class="command-palette hidden">
     <div class="command-palette-backdrop"></div>
