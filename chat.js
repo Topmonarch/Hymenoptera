@@ -55,6 +55,17 @@
   var messagesToday = Number(localStorage.getItem('messagesToday')) || 0;
   var lastResetDate = localStorage.getItem('lastResetDate') || new Date().toDateString();
 
+  // Daily reset check on page load: if the calendar day has changed, reset the counter
+  (function () {
+    var today = new Date().toDateString();
+    if (lastResetDate !== today) {
+      messagesToday = 0;
+      lastResetDate = today;
+      localStorage.setItem('messagesToday', '0');
+      localStorage.setItem('lastResetDate', today);
+    }
+  }());
+
   var modelLabels = {
     fast: 'Fast',
     smart: 'Smart',
