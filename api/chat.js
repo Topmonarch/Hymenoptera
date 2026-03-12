@@ -9,7 +9,29 @@
 
 // All OpenAI requests are routed through the queue/worker layer so that at most
 // MAX_CONCURRENT_REQUESTS are in-flight at once, improving scalability under load.
-const { processRequest } = require('../server/worker');
+const { processRequest: _workerProcessRequest } = require('../server/worker');
+
+// Redis-backed worker is loaded lazily so that a missing lib/ directory or
+// misconfigured Redis credentials never break the existing request flow.
+let _redisProcessWithRedis = null;
+try { _redisProcessWithRedis = require('../lib/aiWorker').processWithRedis; } catch (e) { console.warn('api/chat: Redis worker unavailable, using in-memory queue:', e.message); }
+
+/**
+ * Route an AI request through the Redis queue when available, with automatic
+ * fallback to the existing in-memory concurrency queue if Redis is unavailable
+ * or returns an error.
+ */
+async function processRequest(params) {
+  if (_redisProcessWithRedis) {
+    try {
+      return await _redisProcessWithRedis(params);
+    } catch (e) {
+      // Redis path failed (unavailable, at capacity, network error, etc.) —
+      // fall through to the reliable in-memory queue below.
+    }
+  }
+  return _workerProcessRequest(params);
+}
 
 async function webSearch(query) {
   const url = 'https://api.duckduckgo.com/?q=' + encodeURIComponent(query) + '&format=json&no_redirect=1&no_html=1';
