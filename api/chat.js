@@ -16,6 +16,10 @@ const { processRequest: _workerProcessRequest } = require('../server/worker');
 let _redisProcessWithRedis = null;
 try { _redisProcessWithRedis = require('../lib/aiWorker').processWithRedis; } catch (e) { console.warn('api/chat: Redis worker unavailable, using in-memory queue:', e.message); }
 
+// Conversation memory helper is loaded lazily for the same reason.
+let _conversationMemory = null;
+try { _conversationMemory = require('../lib/conversationMemory'); } catch (e) { console.warn('api/chat: conversation memory unavailable:', e.message); }
+
 /**
  * Route an AI request through the Redis queue when available, with automatic
  * fallback to the existing in-memory concurrency queue if Redis is unavailable
@@ -55,7 +59,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { messages, systemPrompt, agent, model, hiveMode, fileContext, image, webAccess } = req.body || {};
+    const { messages, systemPrompt, agent, model, hiveMode, fileContext, image, webAccess, sessionId } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.setHeader('Content-Type', 'application/json');
@@ -102,12 +106,35 @@ module.exports = async function handler(req, res) {
       // Build the full message list: system prompt first, then the complete conversation history.
       // Placing the system prompt at position 0 ensures the agent persona is always in effect.
       // The spread of messages sends every prior user + assistant turn so the AI remembers context.
+
+      // When a sessionId is provided, load the stored conversation from Redis and append
+      // the latest user message before sending to OpenAI.  This is entirely opt-in:
+      // if sessionId is absent (or Redis is unavailable) the behaviour is unchanged.
+      let chatMessages = messages;
+      if (sessionId && _conversationMemory) {
+        try {
+          const existingHistory = await _conversationMemory.getConversation(sessionId);
+          if (existingHistory.length === 0) {
+            // First request for this session — seed Redis with the full incoming history
+            await _conversationMemory.saveConversation(sessionId, messages);
+            chatMessages = messages;
+          } else {
+            // Subsequent request — append only the new user message to the stored history
+            const newUserMessage = messages[messages.length - 1];
+            chatMessages = await _conversationMemory.appendMessage(sessionId, newUserMessage);
+          }
+        } catch (e) {
+          // Redis failure is non-fatal — fall back to the original messages array
+          chatMessages = messages;
+        }
+      }
+
       const apiMessages = [
         { role: 'system', content: resolvedSystemPrompt },
         ...(fileContext && fileContext.length > 0 ? [{ role: 'system', content: 'The following document was uploaded by the user. Use it as reference when answering:\n\n' + fileContext }] : []),
         ...(image ? [{ role: 'system', content: 'The user has uploaded an image. Analyze the image when responding.' }] : []),
         ...(webResults ? [{ role: 'system', content: 'WEB SEARCH RESULTS:\n' + webResults }] : []),
-        ...messages
+        ...chatMessages
       ];
 
       // Send the full conversation history (system prompt + all prior turns) to OpenAI.
@@ -132,18 +159,48 @@ module.exports = async function handler(req, res) {
         return res.status(502).json({ error: (errorData && errorData.error) || { message: 'Upstream error' } });
       }
 
-      // Stream SSE events from OpenAI directly to the client
+      // Stream SSE events from OpenAI directly to the client.
+      // When a sessionId is present, accumulate the assistant text from each SSE
+      // delta chunk so the full reply can be persisted to Redis after streaming ends.
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('X-Accel-Buffering', 'no');
 
       const reader = upstream.body.getReader();
       const decoder = new TextDecoder();
+      let assistantContent = '';
+      const captureMemory = !!(sessionId && _conversationMemory);
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        res.write(decoder.decode(value, { stream: true }));
+        const chunk = decoder.decode(value, { stream: true });
+        res.write(chunk);
+
+        // Parse SSE delta chunks to reconstruct the full assistant reply
+        if (captureMemory) {
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+              try {
+                const json = JSON.parse(line.slice(6));
+                const delta = json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content;
+                if (delta) assistantContent += delta;
+              } catch (e) {
+                // Malformed chunk — skip
+              }
+            }
+          }
+        }
+      }
+
+      // Save the assistant reply to Redis so the next request can include it
+      if (captureMemory && assistantContent) {
+        try {
+          await _conversationMemory.appendMessage(sessionId, { role: 'assistant', content: assistantContent });
+        } catch (e) {
+          // Non-fatal — the response has already been sent to the client
+        }
       }
 
       res.end();
