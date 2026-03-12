@@ -7,6 +7,10 @@
 // Each SSE event is forwarded directly from OpenAI.
 // On early errors (before streaming begins): returns JSON { error: { message } }.
 
+// All OpenAI requests are routed through the queue/worker layer so that at most
+// MAX_CONCURRENT_REQUESTS are in-flight at once, improving scalability under load.
+const { processRequest } = require('../server/worker');
+
 async function webSearch(query) {
   const url = 'https://api.duckduckgo.com/?q=' + encodeURIComponent(query) + '&format=json&no_redirect=1&no_html=1';
   const response = await fetch(url);
@@ -86,17 +90,13 @@ module.exports = async function handler(req, res) {
 
       // Send the full conversation history (system prompt + all prior turns) to OpenAI.
       // This gives the model the complete context it needs to produce a coherent reply.
-      const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: apiMessages,
-          stream: true
-        })
+      // The call is routed through the worker queue to limit concurrent OpenAI requests.
+      const upstream = await processRequest({
+        apiMessages,
+        apiKey,
+        selectedModel,
+        stream: true,
+        agentType: agent
       });
 
       if (!upstream.ok) {
@@ -163,17 +163,13 @@ module.exports = async function handler(req, res) {
           ...(hiveWebResults ? [{ role: 'system', content: 'The following web research results are available:\n' + hiveWebResults }] : []),
           ...messages
         ];
-        const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + apiKey
-          },
-          body: JSON.stringify({
-            model: selectedModel,
-            messages: agentMessages,
-            stream: false
-          })
+        // Route hive-mode agent calls through the worker queue to limit concurrency.
+        const upstream = await processRequest({
+          apiMessages: agentMessages,
+          apiKey,
+          selectedModel,
+          stream: false,
+          agentType: agentName
         });
         if (!upstream.ok) {
           return '[Error from ' + hiveAgentLabels[agentName] + ': HTTP ' + upstream.status + ']';
