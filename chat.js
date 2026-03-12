@@ -586,8 +586,21 @@
     setStatus('Thinking...');
     var typingIndicator = createStreamingBubble();
     if (typingIndicator) {
-      typingIndicator.innerText = 'Hymenoptera is thinking...';
+      typingIndicator.innerText = 'Hymenoptera is thinking.';
       typingIndicator.classList.add('typing-indicator');
+    }
+    // Animate the dots: cycle through 1, 2, 3 dots every 500ms
+    var dotCount = 1;
+    var dotInterval = null;
+    if (typingIndicator) {
+      dotInterval = setInterval(function () {
+        dotCount = (dotCount % 3) + 1;
+        if (typingIndicator && typingIndicator.parentNode) {
+          typingIndicator.innerText = 'Hymenoptera is thinking' + '.'.repeat(dotCount);
+        } else {
+          clearInterval(dotInterval);
+        }
+      }, 500);
     }
     var assistantBubble = null;
     var assistantText = '';
@@ -609,6 +622,7 @@
       });
 
       if (!response.ok) {
+        clearInterval(dotInterval);
         if (typingIndicator) {
           typingIndicator.classList.remove('typing-indicator');
           typingIndicator.innerText = 'Error contacting AI server';
@@ -623,6 +637,7 @@
         assistantText = (data && data.content) ? data.content : NO_RESPONSE_MSG;
         // Replace typing indicator with the actual response
         if (typingIndicator) {
+          clearInterval(dotInterval);
           typingIndicator.classList.remove('typing-indicator');
           typingIndicator.innerText = assistantText;
           assistantBubble = typingIndicator;
@@ -658,6 +673,7 @@
                   // On first token: remove typing indicator and create the real assistant bubble
                   if (!typingRemoved) {
                     typingRemoved = true;
+                    clearInterval(dotInterval);
                     if (typingIndicator) typingIndicator.remove();
                     assistantBubble = createStreamingBubble();
                   }
@@ -677,6 +693,7 @@
         // If no streaming content was captured, show fallback
         if (!assistantText) {
           if (!typingRemoved && typingIndicator) {
+            clearInterval(dotInterval);
             typingIndicator.classList.remove('typing-indicator');
             typingIndicator.innerText = NO_RESPONSE_MSG;
             assistantBubble = typingIndicator;
@@ -693,6 +710,7 @@
       saveConversations();
     } catch (err) {
       console.error('sendMessage error:', err);
+      clearInterval(dotInterval);
       // Show error in whichever bubble is currently visible
       var errorBubble = assistantBubble || typingIndicator;
       if (errorBubble) {
