@@ -582,9 +582,14 @@
     saveConversations();
     messageInput.value = '';
 
-    // Show thinking status and create empty assistant bubble
+    // Show thinking status and create a typing indicator bubble
     setStatus('Thinking...');
-    var assistantBubble = createStreamingBubble();
+    var typingIndicator = createStreamingBubble();
+    if (typingIndicator) {
+      typingIndicator.innerText = 'Hymenoptera is thinking...';
+      typingIndicator.classList.add('typing-indicator');
+    }
+    var assistantBubble = null;
     var assistantText = '';
 
     try {
@@ -604,7 +609,10 @@
       });
 
       if (!response.ok) {
-        if (assistantBubble) assistantBubble.innerText = 'Error contacting AI server';
+        if (typingIndicator) {
+          typingIndicator.classList.remove('typing-indicator');
+          typingIndicator.innerText = 'Error contacting AI server';
+        }
         setStatus('Ready');
         return;
       }
@@ -613,8 +621,11 @@
         // Hive mode returns a JSON response with the combined agent outputs
         var data = await response.json();
         assistantText = (data && data.content) ? data.content : NO_RESPONSE_MSG;
-        if (assistantBubble) {
-          assistantBubble.innerText = assistantText;
+        // Replace typing indicator with the actual response
+        if (typingIndicator) {
+          typingIndicator.classList.remove('typing-indicator');
+          typingIndicator.innerText = assistantText;
+          assistantBubble = typingIndicator;
           messagesEl.scrollTop = messagesEl.scrollHeight;
         }
       } else {
@@ -622,6 +633,7 @@
         var reader = response.body.getReader();
         var decoder = new TextDecoder();
         var buffer = '';
+        var typingRemoved = false;
 
         while (true) {
           var result = await reader.read();
@@ -643,6 +655,12 @@
                             parsed.choices[0].delta &&
                             parsed.choices[0].delta.content;
                 if (delta) {
+                  // On first token: remove typing indicator and create the real assistant bubble
+                  if (!typingRemoved) {
+                    typingRemoved = true;
+                    if (typingIndicator) typingIndicator.remove();
+                    assistantBubble = createStreamingBubble();
+                  }
                   assistantText += delta;
                   if (assistantBubble) {
                     assistantBubble.innerText = assistantText;
@@ -657,8 +675,14 @@
         }
 
         // If no streaming content was captured, show fallback
-        if (!assistantText && assistantBubble) {
-          assistantBubble.innerText = NO_RESPONSE_MSG;
+        if (!assistantText) {
+          if (!typingRemoved && typingIndicator) {
+            typingIndicator.classList.remove('typing-indicator');
+            typingIndicator.innerText = NO_RESPONSE_MSG;
+            assistantBubble = typingIndicator;
+          } else if (assistantBubble) {
+            assistantBubble.innerText = NO_RESPONSE_MSG;
+          }
           assistantText = NO_RESPONSE_MSG;
         }
       }
@@ -669,7 +693,12 @@
       saveConversations();
     } catch (err) {
       console.error('sendMessage error:', err);
-      if (assistantBubble) assistantBubble.innerText = 'Error contacting AI server';
+      // Show error in whichever bubble is currently visible
+      var errorBubble = assistantBubble || typingIndicator;
+      if (errorBubble) {
+        errorBubble.classList.remove('typing-indicator');
+        errorBubble.innerText = 'Error contacting AI server';
+      }
     }
 
     setStatus('Ready');
