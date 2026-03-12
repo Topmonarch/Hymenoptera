@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>HYMENOPTERA</title>
+  <link rel="stylesheet" href="settings/settings.css" />
   <style>
     :root {
       --accent-color: #2D8CFF;
@@ -794,6 +795,7 @@
     <div class="sidebar-account">
       <div id="account-label"></div>
       <button id="signoutBtn" class="sidebar-btn" onclick="signOut()" style="display:none;">Sign Out</button>
+      <button class="sidebar-settings-btn" onclick="openSettings()">⚙ Settings</button>
     </div>
   </div>
 
@@ -843,7 +845,7 @@
               onkeydown="if(event.key==='Enter'){createAccount();}" />
           </div>
           <div id="signup-error" class="form-error"></div>
-          <button class="submit-btn" onclick="createAccount()">Create Account</button>
+          <button class="submit-btn" onclick="createAccountWithVerification()">Create Account</button>
           <div class="guest-divider">or</div>
           <button class="guest-btn" onclick="continueAsGuest()">Continue as Guest</button>
         </div>
@@ -896,6 +898,207 @@
 
     </div>
 
+    <!-- Email Verification Screen -->
+    <div id="verification-screen">
+      <div class="verification-box">
+        <div class="verification-icon">✉️</div>
+        <h2>VERIFY YOUR EMAIL</h2>
+        <p>We've sent a verification link to:</p>
+        <div class="verification-email-display" id="verification-email-display"></div>
+        <p>Click the link in your email to activate your account and start using Hymenoptera.</p>
+        <div class="verification-actions">
+          <button class="submit-btn" onclick="resendVerificationEmail()">Resend Verification Email</button>
+          <button class="guest-btn" onclick="cancelVerification()">Back to Sign In</button>
+        </div>
+        <div id="verification-message"></div>
+      </div>
+    </div>
+
+    <!-- Settings Screen -->
+    <div id="settings-screen">
+      <div class="settings-header">
+        <h2>SETTINGS</h2>
+        <button class="settings-back-btn" onclick="closeSettings()">← Back to Chat</button>
+      </div>
+      <div class="settings-layout">
+        <div class="settings-nav">
+          <div class="settings-nav-item active" data-tab="profile" onclick="switchSettingsTab('profile')">Profile</div>
+          <div class="settings-nav-item" data-tab="preferences" onclick="switchSettingsTab('preferences')">Preferences</div>
+          <div class="settings-nav-item" data-tab="security" onclick="switchSettingsTab('security')">Security</div>
+          <div class="settings-nav-item" data-tab="billing" onclick="switchSettingsTab('billing')">Billing</div>
+        </div>
+        <div class="settings-content">
+
+          <!-- Profile Panel -->
+          <div id="settings-profile" class="settings-panel active">
+            <div class="settings-section-title">Profile</div>
+
+            <div class="settings-field">
+              <label for="profile-email">Email</label>
+              <input id="profile-email" type="email" readonly />
+            </div>
+            <div class="settings-field">
+              <label for="profile-name">Name</label>
+              <input id="profile-name" type="text" placeholder="Your name" />
+            </div>
+            <div class="settings-field">
+              <label for="profile-country">Country</label>
+              <select id="profile-country">
+                <option value="">Select country...</option>
+                <option value="US">United States</option>
+                <option value="GB">United Kingdom</option>
+                <option value="CA">Canada</option>
+                <option value="AU">Australia</option>
+                <option value="NZ">New Zealand</option>
+                <option value="FR">France</option>
+                <option value="DE">Germany</option>
+                <option value="BE">Belgium</option>
+                <option value="NL">Netherlands</option>
+                <option value="ES">Spain</option>
+                <option value="IT">Italy</option>
+                <option value="CH">Switzerland</option>
+                <option value="AT">Austria</option>
+                <option value="SE">Sweden</option>
+                <option value="NO">Norway</option>
+                <option value="DK">Denmark</option>
+                <option value="FI">Finland</option>
+                <option value="IE">Ireland</option>
+                <option value="PT">Portugal</option>
+                <option value="JP">Japan</option>
+                <option value="KR">South Korea</option>
+                <option value="CN">China</option>
+                <option value="IN">India</option>
+                <option value="BR">Brazil</option>
+                <option value="MX">Mexico</option>
+                <option value="ZA">South Africa</option>
+                <option value="SG">Singapore</option>
+              </select>
+            </div>
+            <div class="settings-field">
+              <label for="profile-language">Language</label>
+              <select id="profile-language">
+                <option value="">Select language...</option>
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="nl">Dutch</option>
+                <option value="pt">Portuguese</option>
+                <option value="it">Italian</option>
+                <option value="ja">Japanese</option>
+                <option value="zh">Chinese</option>
+                <option value="ko">Korean</option>
+                <option value="ar">Arabic</option>
+                <option value="hi">Hindi</option>
+              </select>
+            </div>
+            <div class="settings-field">
+              <label for="profile-dob">Date of Birth</label>
+              <input id="profile-dob" type="date" />
+            </div>
+            <button class="settings-btn" onclick="saveProfile()">Save Profile</button>
+            <div id="profile-message" class="settings-message"></div>
+          </div>
+
+          <!-- Preferences Panel -->
+          <div id="settings-preferences" class="settings-panel">
+            <div class="settings-section-title">Preferences</div>
+
+            <div class="pref-row">
+              <div>
+                <div class="pref-label">Compact Mode</div>
+                <div class="pref-desc">Reduce spacing between messages</div>
+              </div>
+              <label class="pref-toggle">
+                <input type="checkbox" id="pref-compact" />
+                <span class="pref-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="pref-row">
+              <div>
+                <div class="pref-label">Auto-Scroll</div>
+                <div class="pref-desc">Automatically scroll to latest message</div>
+              </div>
+              <label class="pref-toggle">
+                <input type="checkbox" id="pref-autoscroll" />
+                <span class="pref-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="pref-row">
+              <div>
+                <div class="pref-label">Sound Notifications</div>
+                <div class="pref-desc">Play a sound when a response is ready</div>
+              </div>
+              <label class="pref-toggle">
+                <input type="checkbox" id="pref-sound" />
+                <span class="pref-toggle-slider"></span>
+              </label>
+            </div>
+
+            <hr class="settings-divider" />
+            <button class="settings-btn" onclick="savePreferences()">Save Preferences</button>
+            <div id="preferences-message" class="settings-message"></div>
+          </div>
+
+          <!-- Security Panel -->
+          <div id="settings-security" class="settings-panel">
+            <div class="settings-section-title">Security</div>
+
+            <div class="security-action">
+              <div class="security-action-title">Change Password</div>
+              <div class="security-action-desc">Update your account password.</div>
+              <div class="settings-field">
+                <label for="current-password">Current Password</label>
+                <input id="current-password" type="password" placeholder="Current password" />
+              </div>
+              <div class="settings-field">
+                <label for="new-password">New Password</label>
+                <input id="new-password" type="password" placeholder="New password (min 6 characters)" />
+              </div>
+              <div class="settings-field">
+                <label for="confirm-new-password">Confirm New Password</label>
+                <input id="confirm-new-password" type="password" placeholder="Confirm new password" />
+              </div>
+              <button class="settings-btn" onclick="changePassword()">Update Password</button>
+            </div>
+
+            <div class="security-action">
+              <div class="security-action-title">Logout from All Sessions</div>
+              <div class="security-action-desc">Sign out from your current session.</div>
+              <button class="settings-btn secondary" onclick="logoutAllSessions()">Sign Out</button>
+            </div>
+
+            <div class="security-action">
+              <div class="security-action-title">Delete Account</div>
+              <div class="security-action-desc">Permanently remove your account and all associated data. This action cannot be undone.</div>
+              <button class="settings-btn danger" onclick="deleteAccount()">Delete My Account</button>
+            </div>
+
+            <div id="security-message" class="settings-message"></div>
+          </div>
+
+          <!-- Billing Panel -->
+          <div id="settings-billing" class="settings-panel">
+            <div class="settings-section-title">Billing</div>
+
+            <div class="billing-plan-card">
+              <div class="billing-plan-name" id="billing-plan-name">Starter</div>
+              <div class="billing-plan-detail">Current Plan</div>
+              <hr class="settings-divider" style="margin:12px 0;" />
+              <div class="billing-plan-detail">Message Limit: <span id="billing-plan-limit">30 messages / day</span></div>
+            </div>
+
+            <p style="font-size:13px;color:#888;margin:0 0 16px;">
+              Use the Billing Portal to manage your subscription, update payment methods, view invoices, or cancel your plan.
+            </p>
+            <button class="settings-btn" onclick="openBillingPortal()">Manage Billing</button>
+            <div id="billing-message" class="settings-message"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- Upgrade Modal -->
@@ -921,6 +1124,7 @@
 
   <script src="auth.js"></script>
   <script src="chat.js"></script>
+  <script src="settings/settings.js"></script>
 
   <script>
     function switchTab(tab) {
