@@ -454,6 +454,9 @@
   }
 
   function loadChat(chatId) {
+    if (typeof setCurrentView === 'function' && window.currentView === 'settings') {
+      setCurrentView('chat');
+    }
     currentChatId = chatId;
     var conv = conversations[chatId];
     currentModel = (conv && conv.model) ? conv.model : DEFAULT_MODEL;
@@ -686,6 +689,9 @@
   // New chat: create a fresh conversation and update the sidebar.
   // Resets conversation memory by starting a new messages array for the new chat.
   window.newChat = function () {
+    if (typeof setCurrentView === 'function' && window.currentView === 'settings') {
+      setCurrentView('chat');
+    }
     var user = localStorage.getItem('hymenoptera_user');
     if (!user) return;
     currentChatId = generateChatId();

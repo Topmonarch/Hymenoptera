@@ -1,15 +1,28 @@
 // ===== SETTINGS MODULE =====
 // Hymenoptera Settings - Profile, Preferences, Security, Billing
 
+var currentView = 'chat';
+
+function setCurrentView(view) {
+  currentView = view;
+  var chatContainer = document.getElementById('chat-screen');
+  var settingsContainer = document.getElementById('settings-screen');
+  if (view === 'chat') {
+    if (chatContainer) chatContainer.style.display = 'flex';
+    if (settingsContainer) settingsContainer.style.display = 'none';
+  } else if (view === 'settings') {
+    if (chatContainer) chatContainer.style.display = 'none';
+    if (settingsContainer) settingsContainer.style.display = 'flex';
+  }
+}
+
 function openSettings() {
-  document.getElementById('chat-screen').style.display = 'none';
-  document.getElementById('settings-screen').style.display = 'flex';
+  setCurrentView('settings');
   loadSettingsData();
 }
 
 function closeSettings() {
-  document.getElementById('settings-screen').style.display = 'none';
-  document.getElementById('chat-screen').style.display = 'flex';
+  setCurrentView('chat');
 }
 
 function switchSettingsTab(tab) {
