@@ -996,22 +996,28 @@
     ? new (window.SpeechRecognition || window.webkitSpeechRecognition)()
     : null;
 
+  var isListening = false;
+  var voiceCancelled = false;
+
   if (recognition) {
     recognition.lang = 'en-US';
     recognition.continuous = false;
     recognition.interimResults = false;
 
     recognition.onresult = function (event) {
-      var transcript = event.results[0][0].transcript;
-      if (messageInput) messageInput.value += (messageInput.value ? ' ' : '') + transcript;
-      updateVoiceIndicator(false);
+      if (!voiceCancelled) {
+        var transcript = event.results[0][0].transcript;
+        if (messageInput) messageInput.value += (messageInput.value ? ' ' : '') + transcript;
+      }
     };
 
     recognition.onerror = function () {
+      isListening = false;
       updateVoiceIndicator(false);
     };
 
     recognition.onend = function () {
+      isListening = false;
       updateVoiceIndicator(false);
     };
   }
@@ -1035,11 +1041,20 @@
         alert('Speech recognition is not supported in this browser.');
         return;
       }
-      try {
-        recognition.start();
-        updateVoiceIndicator(true);
-      } catch (e) {
-        // recognition may already be running; ignore
+      if (isListening) {
+        voiceCancelled = true;
+        recognition.stop();
+        isListening = false;
+        updateVoiceIndicator(false);
+      } else {
+        voiceCancelled = false;
+        try {
+          recognition.start();
+          isListening = true;
+          updateVoiceIndicator(true);
+        } catch (e) {
+          // recognition may already be running; ignore
+        }
       }
     });
   }
