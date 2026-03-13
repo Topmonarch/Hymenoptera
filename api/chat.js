@@ -102,12 +102,14 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    const identityBlock = '\n\nYou are Hymenoptera, an advanced AI assistant. Your name is Hymenoptera. If a user asks who you are or asks if you are Hymenoptera, you must respond that you are Hymenoptera. You assist users with: conversations, coding, research, image generation, file analysis, business insights, and general knowledge. Always speak confidently as Hymenoptera and represent the Hymenoptera AI platform.';
+
     const fallbackPrompts = {
-      general: 'You are a helpful AI assistant.',
-      coding: 'You are a professional software engineer that writes and explains code clearly.',
-      research: 'You are an academic researcher who explains complex topics clearly.',
-      business: 'You are a startup strategist and marketing advisor.',
-      robotics: 'You are a robotics and automation engineering expert.'
+      general: 'You are a helpful AI assistant.' + identityBlock,
+      coding: 'You are a professional software engineer that writes and explains code clearly.' + identityBlock,
+      research: 'You are an academic researcher who explains complex topics clearly.' + identityBlock,
+      business: 'You are a startup strategist and marketing advisor.' + identityBlock,
+      robotics: 'You are a robotics and automation engineering expert.' + identityBlock
     };
 
     const apiKey = process.env.OPENAI_API_KEY;
