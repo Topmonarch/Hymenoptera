@@ -788,28 +788,170 @@
     });
   }
 
-  // File upload: read selected file text into uploadedFileContent
+  // Supported MIME type categories — mirrors the server-side fileProcessor logic.
+  var fileTypeCategories = {
+    image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'],
+    pdf:   ['application/pdf'],
+    video: ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/ogg']
+  };
+  var fileExtCategories = {
+    '.jpg': 'image', '.jpeg': 'image', '.png': 'image', '.gif': 'image', '.webp': 'image', '.svg': 'image',
+    '.pdf': 'pdf',
+    '.mp4': 'video', '.mov': 'video', '.avi': 'video', '.webm': 'video', '.mkv': 'video', '.ogv': 'video'
+  };
+
+  function detectUploadCategory(file) {
+    var mime = (file.type || '').toLowerCase().split(';')[0].trim();
+    for (var cat in fileTypeCategories) {
+      if (fileTypeCategories[cat].indexOf(mime) !== -1) return cat;
+    }
+    var ext = (file.name || '').toLowerCase().match(/(\.[^.]+)$/);
+    if (ext && fileExtCategories[ext[1]]) return fileExtCategories[ext[1]];
+    return 'text'; // default: treat as text/code
+  }
+
+  /**
+   * Send a file to /api/upload-file and display the AI analysis in the chat.
+   * For text and code files the existing text-extraction path is also kept
+   * so the content can be used as context in subsequent chat messages.
+   */
+  async function processUploadedFile(file, base64Data, category) {
+    var fileUploadBtn = document.getElementById('file-upload-button');
+
+    // Ensure there is an active chat to display the analysis in.
+    if (!currentChatId) {
+      currentChatId = generateChatId();
+      var chatCount = Object.keys(conversations).filter(function (id) {
+        return !conversations[id].archived && conversations[id].project === currentProject;
+      }).length + 1;
+      conversations[currentChatId] = {
+        title: 'Chat ' + chatCount,
+        messages: [],
+        agent: currentAgent,
+        model: currentModel,
+        project: currentProject
+      };
+      renderChatList();
+    }
+    if (emptyState) emptyState.style.display = 'none';
+
+    // Show a user message indicating the upload.
+    var userMsg = '📎 Uploaded file: ' + file.name;
+    addMessage('user', userMsg);
+    saveMessageToHistory({ role: 'user', content: userMsg });
+    saveConversations();
+
+    // Show a loading indicator.
+    setStatus('Analyzing file...');
+    var thinkingBubble = createStreamingBubble();
+    if (thinkingBubble) {
+      thinkingBubble.innerText = 'Analyzing file...';
+      thinkingBubble.classList.add('typing-indicator');
+    }
+
+    try {
+      var hymenAuth = window.hymAuth && window.hymAuth.currentUser;
+      var userId = hymenAuth ? hymenAuth.uid : 'guest';
+
+      var response = await fetch('/api/upload-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileData: base64Data,
+          fileName: file.name,
+          mimeType: file.type || '',
+          fileSize: file.size || 0,
+          userId: userId,
+          plan: userPlan,
+          sessionId: currentChatId
+        })
+      });
+
+      var data = await response.json();
+
+      if (thinkingBubble) {
+        thinkingBubble.classList.remove('typing-indicator');
+        thinkingBubble.remove();
+      }
+
+      if (!response.ok) {
+        var errMsg = (data && data.error && data.error.message) || 'File analysis failed.';
+        addMessage('assistant', errMsg);
+        saveMessageToHistory({ role: 'assistant', content: errMsg });
+        setStatus('Ready');
+        if (fileUploadBtn) fileUploadBtn.title = 'Upload file';
+        return;
+      }
+
+      var analysis = data.analysis || 'No analysis returned.';
+      addMessage('assistant', analysis);
+      saveMessageToHistory({ role: 'assistant', content: analysis });
+      saveConversations();
+      if (fileUploadBtn) fileUploadBtn.title = 'File analyzed: ' + file.name;
+    } catch (err) {
+      if (thinkingBubble) {
+        thinkingBubble.classList.remove('typing-indicator');
+        thinkingBubble.remove();
+      }
+      addMessage('assistant', 'Error analyzing file: ' + (err.message || 'Unknown error'));
+      if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
+    }
+    setStatus('Ready');
+  }
+
+  // File upload: detect file type and route accordingly.
+  // • Text / code files: read as text for use as chat context (existing behaviour) AND
+  //   send to /api/upload-file for AI analysis.
+  // • Images, PDFs, videos: read as base64 and send to /api/upload-file.
   var fileUploadInput = document.getElementById('file-upload');
   if (fileUploadInput) {
     fileUploadInput.addEventListener('change', function (event) {
       var file = event.target.files[0];
       if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function (e) {
-        uploadedFileContent = e.target.result;
-        if (!projects[currentProject]) projects[currentProject] = { files: [] };
-        if (!projects[currentProject].files) projects[currentProject].files = [];
-        projects[currentProject].files.push(uploadedFileContent);
-        saveConversations();
-        var fileUploadBtn = document.getElementById('file-upload-button');
-        if (fileUploadBtn) fileUploadBtn.title = 'File loaded: ' + file.name;
-      };
-      reader.onerror = function () {
-        uploadedFileContent = '';
-        var fileUploadBtn = document.getElementById('file-upload-button');
-        if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
-      };
-      reader.readAsText(file);
+      var fileUploadBtn = document.getElementById('file-upload-button');
+      var category = detectUploadCategory(file);
+
+      if (category === 'text') {
+        // Original behaviour: read as UTF-8 text and store as context.
+        var textReader = new FileReader();
+        textReader.onload = function (e) {
+          uploadedFileContent = e.target.result;
+          if (!projects[currentProject]) projects[currentProject] = { files: [] };
+          if (!projects[currentProject].files) projects[currentProject].files = [];
+          projects[currentProject].files.push(uploadedFileContent);
+          saveConversations();
+          if (fileUploadBtn) fileUploadBtn.title = 'File loaded: ' + file.name;
+
+          // Also send to upload endpoint for inline AI analysis.
+          var b64Reader = new FileReader();
+          b64Reader.onload = function (ev) {
+            var dataUrl = ev.target.result || '';
+            var base64 = dataUrl.indexOf(',') !== -1 ? dataUrl.split(',')[1] : dataUrl;
+            processUploadedFile(file, base64, category);
+          };
+          b64Reader.readAsDataURL(file);
+        };
+        textReader.onerror = function () {
+          uploadedFileContent = '';
+          if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
+        };
+        textReader.readAsText(file);
+      } else {
+        // Image, PDF, video: read as base64 DataURL, strip the prefix, send to endpoint.
+        var b64Reader = new FileReader();
+        b64Reader.onload = function (ev) {
+          var dataUrl = ev.target.result || '';
+          var base64 = dataUrl.indexOf(',') !== -1 ? dataUrl.split(',')[1] : dataUrl;
+          processUploadedFile(file, base64, category);
+        };
+        b64Reader.onerror = function () {
+          if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
+        };
+        b64Reader.readAsDataURL(file);
+      }
+
+      // Reset the input so the same file can be re-selected.
+      event.target.value = '';
     });
   }
 
