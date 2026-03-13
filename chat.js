@@ -105,6 +105,8 @@
 
   var NO_RESPONSE_MSG = 'No response received from server';
 
+  var WELCOME_MESSAGE = 'Hello, I\'m Hymenoptera \uD83D\uDC1D\nYour AI assistant and agent platform.\n\nYou can ask questions, generate images, analyze files, or switch to specialized agents like Coding, Research, Business, and Robotics.\n\nHow can I help today?';
+
   function updateAgentIndicator() {
     var indicator = document.getElementById('agent-indicator');
     if (indicator) {
@@ -148,6 +150,14 @@
       ? messagesToday + ' / \u221e'
       : messagesToday + ' / ' + limit;
     counter.textContent = 'Messages Today: ' + text;
+    var resetNote = counter.querySelector('.counter-reset-note');
+    if (!resetNote) {
+      resetNote = document.createElement('span');
+      resetNote.className = 'counter-reset-note';
+      resetNote.style.cssText = 'display:block;font-size:10px;color:#666;';
+      counter.appendChild(resetNote);
+    }
+    resetNote.textContent = 'Resets at 12:00 AM';
   }
 
   function updateWebIndicator() {
@@ -477,6 +487,10 @@
       chatMessages.forEach(function (msg) {
         addMessage(msg.role, msg.content);
       });
+      // Show welcome message for empty conversations
+      if (chatMessages.length === 0) {
+        addMessage('assistant', WELCOME_MESSAGE);
+      }
       renderChatHistory();
       if (messagesEl) {
         messagesEl.classList.remove('fading');
@@ -829,6 +843,7 @@
     };
     saveConversations();
     clearChatUI();
+    addMessage('assistant', WELCOME_MESSAGE);
     renderChatHistory();
     // Clear uploaded file context for the new conversation
     uploadedFileContent = '';
