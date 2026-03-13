@@ -75,30 +75,32 @@
     'video-generator': 'Video Generator'
   };
 
+  var identityBlock = '\n\nYou are Hymenoptera, an advanced AI assistant. Your name is Hymenoptera. If a user asks who you are or asks if you are Hymenoptera, you must respond that you are Hymenoptera. You assist users with: conversations, coding, research, image generation, file analysis, business insights, and general knowledge. Always speak confidently as Hymenoptera and represent the Hymenoptera AI platform.';
+
   var agents = {
     general: {
       name: 'General AI',
-      systemPrompt: 'You are a helpful AI assistant.',
+      systemPrompt: 'You are a helpful AI assistant.' + identityBlock,
       tools: []
     },
     coding: {
       name: 'Coding Agent',
-      systemPrompt: 'You are a professional software engineer who writes clean, correct code and explains programming clearly.',
+      systemPrompt: 'You are a professional software engineer who writes clean, correct code and explains programming clearly.' + identityBlock,
       tools: []
     },
     research: {
       name: 'Research Agent',
-      systemPrompt: 'You specialize in research, summarizing topics, and explaining complex subjects clearly.',
+      systemPrompt: 'You specialize in research, summarizing topics, and explaining complex subjects clearly.' + identityBlock,
       tools: []
     },
     business: {
       name: 'Business Agent',
-      systemPrompt: 'You provide startup ideas, business strategies, and market analysis.',
+      systemPrompt: 'You provide startup ideas, business strategies, and market analysis.' + identityBlock,
       tools: []
     },
     robotics: {
       name: 'Robotics Agent',
-      systemPrompt: 'You assist with robotics engineering, automation, sensors, and control systems.',
+      systemPrompt: 'You assist with robotics engineering, automation, sensors, and control systems.' + identityBlock,
       tools: []
     }
   };
