@@ -20,6 +20,11 @@ try { _redisProcessWithRedis = require('../lib/aiWorker').processWithRedis; } ca
 let _conversationMemory = null;
 try { _conversationMemory = require('../lib/conversationMemory'); } catch (e) { console.warn('api/chat: conversation memory unavailable:', e.message); }
 
+// Usage limits helper is loaded lazily so a missing or misconfigured module
+// never breaks the core chat flow.
+let _usageLimits = null;
+try { _usageLimits = require('../lib/usageLimits'); } catch (e) { console.warn('api/chat: usage limits unavailable:', e.message); }
+
 /**
  * Route an AI request through the Redis queue when available, with automatic
  * fallback to the existing in-memory concurrency queue if Redis is unavailable
@@ -59,11 +64,42 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { messages, systemPrompt, agent, model, hiveMode, fileContext, image, webAccess, sessionId } = req.body || {};
+    const { messages, systemPrompt, agent, model, hiveMode, fileContext, image, video, webAccess, sessionId, userId, plan } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.setHeader('Content-Type', 'application/json');
       return res.status(400).json({ error: { message: 'messages array required' } });
+    }
+
+    // Enforce daily usage limits when the helper module is available.
+    // The user is identified by userId (if provided) or sessionId as a fallback.
+    // Guests and sessions without any identifier skip enforcement gracefully.
+    if (_usageLimits) {
+      const trackingId = (userId && userId !== 'guest') ? userId : sessionId;
+      if (trackingId) {
+        try {
+          // Detect the action type from the request fields.
+          // video flag → 'video', image flag → 'image', everything else → 'message'
+          let actionType = 'message';
+          if (video) {
+            actionType = 'video';
+          } else if (image) {
+            actionType = 'image';
+          }
+
+          const KNOWN_PLANS = Object.keys(_usageLimits.PLAN_LIMITS);
+          const rawPlan = typeof plan === 'string' ? plan.toLowerCase() : '';
+          const userPlan = KNOWN_PLANS.includes(rawPlan) ? rawPlan : 'starter';
+          const result = await _usageLimits.checkAndTrack(trackingId, userPlan, actionType);
+          if (!result.allowed) {
+            res.setHeader('Content-Type', 'application/json');
+            return res.status(429).json({ error: { message: result.error || 'Daily limit reached. Upgrade your plan or wait for the reset.' } });
+          }
+        } catch (e) {
+          // Usage limit check failure is non-fatal — let the request proceed
+          console.warn('api/chat: usage limit check failed:', e.message);
+        }
+      }
     }
 
     const fallbackPrompts = {
