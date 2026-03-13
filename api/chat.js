@@ -119,7 +119,13 @@ module.exports = async function handler(req, res) {
     const modelMap = {
       fast: 'gpt-4o-mini',
       smart: 'gpt-4o',
-      coding: 'gpt-4o'
+      coding: 'gpt-4o',
+      vision: 'gpt-4o',
+      // image-generator and video-generator route to dedicated endpoints in the
+      // frontend; this mapping is a fallback so any chat requests that do reach
+      // this handler still use a capable model.
+      'image-generator': 'gpt-4o',
+      'video-generator': 'gpt-4o'
     };
     const selectedModel = modelMap[model] || 'gpt-4o';
 
