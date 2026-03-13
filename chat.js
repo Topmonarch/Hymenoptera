@@ -960,12 +960,10 @@
     return /Android|iPhone|iPad|iPod|Tablet/i.test(navigator.userAgent);
   }
 
-  // Show camera and voice buttons only on mobile devices
+  // Show camera button only on mobile devices; voice button is always visible via CSS
   if (isMobileDevice()) {
     var camBtnEl = document.getElementById('camera-btn');
-    var voiceBtnEl = document.getElementById('voice-btn');
     if (camBtnEl) camBtnEl.style.display = 'inline-block';
-    if (voiceBtnEl) voiceBtnEl.style.display = 'inline-block';
   }
 
   // Camera / image input: open file picker for images (native camera on mobile), convert to base64
@@ -1000,10 +998,12 @@
 
   if (recognition) {
     recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
     recognition.onresult = function (event) {
       var transcript = event.results[0][0].transcript;
-      if (messageInput) messageInput.value = transcript;
+      if (messageInput) messageInput.value += (messageInput.value ? ' ' : '') + transcript;
       updateVoiceIndicator(false);
     };
 
@@ -1020,9 +1020,11 @@
     var voiceBtn = document.getElementById('voice-btn');
     if (!voiceBtn) return;
     if (active) {
-      voiceBtn.textContent = '🎤 Recording...';
+      voiceBtn.textContent = '🎤 Listening...';
+      voiceBtn.classList.add('listening');
     } else {
       voiceBtn.textContent = '🎤';
+      voiceBtn.classList.remove('listening');
     }
   }
 

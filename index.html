@@ -773,10 +773,17 @@
       }
     }
 
-    /* Camera and voice buttons are hidden by default; shown only on mobile via JS */
-    #camera-btn,
-    #voice-btn {
+    /* Camera button is hidden by default; shown only on mobile via JS */
+    #camera-btn {
       display: none;
+    }
+
+    /* Voice button: visible on all devices */
+    #voice-btn.listening {
+      background: linear-gradient(180deg, #e53935, #b71c1c);
+      box-shadow:
+        0 6px 18px rgba(0,0,0,0.4),
+        0 0 12px rgba(229,57,53,0.5);
     }
   </style>
 </head>
