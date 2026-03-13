@@ -43,7 +43,7 @@
   // Subscription plan limits (messages per day)
   var planLimits = {
     starter: 30,
-    basic: 150,
+    basic: 100,
     premium: 500,
     ultimate: Infinity
   };
@@ -69,7 +69,10 @@
   var modelLabels = {
     fast: 'Fast',
     smart: 'Smart',
-    coding: 'Coding'
+    coding: 'Coding',
+    vision: 'Vision',
+    'image-generator': 'Image Generator',
+    'video-generator': 'Video Generator'
   };
 
   var agents = {
@@ -613,6 +616,76 @@
       messagesToday++;
       localStorage.setItem('messagesToday', messagesToday);
       updateMessageCounter();
+
+      // Image Generator mode: route to /api/generate-image instead of /api/chat
+      if (convModel === 'image-generator') {
+        var imgHymenAuth = window.hymAuth && window.hymAuth.currentUser;
+        var imgUserId = imgHymenAuth ? imgHymenAuth.uid : 'guest';
+        var imgResponse = await fetch('/api/generate-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: message, plan: userPlan, userId: imgUserId, sessionId: currentChatId })
+        });
+        clearInterval(dotInterval);
+        if (!imgResponse.ok) {
+          var imgErr = null;
+          try { imgErr = await imgResponse.json(); } catch (e) { /* ignore */ }
+          var errMsg = (imgErr && imgErr.error && imgErr.error.message) || 'Image generation failed';
+          if (typingIndicator) {
+            typingIndicator.classList.remove('typing-indicator');
+            typingIndicator.innerText = errMsg;
+          }
+          assistantText = errMsg;
+        } else {
+          var imgData = await imgResponse.json();
+          if (typingIndicator) typingIndicator.remove();
+          // Build an image bubble with download and regenerate controls
+          var imgBubble = document.createElement('div');
+          imgBubble.className = 'message assistant';
+          var imgEl = document.createElement('img');
+          imgEl.src = imgData.imageUrl;
+          imgEl.alt = 'Generated image';
+          imgEl.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin-bottom:8px;';
+          imgBubble.appendChild(imgEl);
+          if (imgData.revisedPrompt && imgData.revisedPrompt !== message) {
+            var captionEl = document.createElement('div');
+            captionEl.style.cssText = 'font-size:11px;color:#888;margin-bottom:8px;';
+            captionEl.textContent = 'Prompt: ' + imgData.revisedPrompt;
+            imgBubble.appendChild(captionEl);
+          }
+          var btnRow = document.createElement('div');
+          btnRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+          var dlBtn = document.createElement('a');
+          dlBtn.href = imgData.imageUrl;
+          dlBtn.download = 'hymenoptera-image.png';
+          dlBtn.target = '_blank';
+          dlBtn.rel = 'noopener noreferrer';
+          dlBtn.textContent = '⬇ Download';
+          dlBtn.style.cssText = 'font-size:12px;color:#2D8CFF;cursor:pointer;text-decoration:none;padding:4px 10px;border:1px solid #2D8CFF;border-radius:4px;';
+          btnRow.appendChild(dlBtn);
+          var regenBtn = document.createElement('button');
+          regenBtn.textContent = '🔄 Regenerate';
+          regenBtn.style.cssText = 'font-size:12px;color:#2D8CFF;cursor:pointer;background:none;border:1px solid #2D8CFF;border-radius:4px;padding:4px 10px;';
+          regenBtn.addEventListener('click', function () {
+            if (messageInput) messageInput.value = message;
+            sendMessage();
+          });
+          btnRow.appendChild(regenBtn);
+          imgBubble.appendChild(btnRow);
+          if (messagesEl) {
+            messagesEl.appendChild(imgBubble);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          }
+          assistantText = '[Image generated] ' + (imgData.revisedPrompt || message);
+          assistantBubble = imgBubble;
+        }
+        conversations[currentChatId].messages.push({ role: 'assistant', content: assistantText });
+        saveMessageToHistory({ role: 'assistant', content: assistantText });
+        saveConversations();
+        setStatus('Ready');
+        if (messageInput) messageInput.focus();
+        return;
+      }
 
       // Send the full conversation history to the backend so the AI remembers all prior messages.
       var response = await fetch('/api/chat', {
