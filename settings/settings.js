@@ -186,7 +186,8 @@ function deleteAccount() {
     'hymenoptera_preferences',
     'hymenoptera_needs_verification',
     'hymenoptera_pending_email',
-    'hymenoptera_pending_token'
+    'hymenoptera_pending_token',
+    'hymenoptera_last_verification_sent'
   ];
 
   if (user) {
@@ -279,6 +280,32 @@ function clearSettingsMessages() {
 
 // ===== EMAIL VERIFICATION =====
 
+// Generate a cryptographically stronger token using available browser APIs.
+function _generateVerificationToken() {
+  if (window.crypto && window.crypto.getRandomValues) {
+    var arr = new Uint8Array(24);
+    window.crypto.getRandomValues(arr);
+    return Array.from(arr).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+  }
+  return Math.random().toString(36).substring(2) + Date.now().toString(36) + Math.random().toString(36).substring(2);
+}
+
+// Call /api/send-verification and return a Promise that resolves with { ok } or rejects with an error message.
+function _sendVerificationEmailRequest(email, token) {
+  return fetch('/api/send-verification', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email, token: token })
+  }).then(function(res) {
+    return res.json().then(function(data) {
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send verification email.');
+      }
+      return data;
+    });
+  });
+}
+
 function createAccountWithVerification() {
   var email = (document.getElementById('signup-email').value || '').trim().toLowerCase();
   var password = document.getElementById('signup-password').value || '';
@@ -296,7 +323,7 @@ function createAccountWithVerification() {
     return;
   }
 
-  var token = Math.random().toString(36).substring(2) + Date.now().toString(36);
+  var token = _generateVerificationToken();
   localStorage.setItem('hymenoptera_pending_email', email);
   localStorage.setItem('hymenoptera_pending_token', token);
   localStorage.setItem('hymenoptera_password_' + email, password);
@@ -307,12 +334,35 @@ function createAccountWithVerification() {
 
   var emailDisplay = document.getElementById('verification-email-display');
   if (emailDisplay) emailDisplay.textContent = email;
+
+  var msgEl = document.getElementById('verification-message');
+  if (msgEl) {
+    msgEl.textContent = 'Sending verification email\u2026';
+    msgEl.style.color = '#aaa';
+  }
+
+  _sendVerificationEmailRequest(email, token)
+    .then(function() {
+      if (msgEl) {
+        msgEl.textContent = 'Verification email sent. Please check your inbox and spam/junk folder.';
+        msgEl.style.color = '#90ee90';
+      }
+      localStorage.setItem('hymenoptera_last_verification_sent', Date.now().toString());
+    })
+    .catch(function(err) {
+      console.error('[createAccountWithVerification] Failed to send verification email:', err && err.message);
+      if (msgEl) {
+        msgEl.textContent = (err && err.message) || 'Your account was created, but we could not send the verification email. Please use the resend button.';
+        msgEl.style.color = '#ff6b6b';
+      }
+    });
 }
 
 function cancelVerification() {
   localStorage.removeItem('hymenoptera_needs_verification');
   localStorage.removeItem('hymenoptera_pending_email');
   localStorage.removeItem('hymenoptera_pending_token');
+  localStorage.removeItem('hymenoptera_last_verification_sent');
 
   document.getElementById('verification-screen').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
@@ -320,7 +370,50 @@ function cancelVerification() {
 
 function resendVerificationEmail() {
   var msgEl = document.getElementById('verification-message');
-  if (msgEl) msgEl.textContent = 'Verification email resent.';
+  var email = localStorage.getItem('hymenoptera_pending_email');
+  var token = localStorage.getItem('hymenoptera_pending_token');
+
+  if (!email || !token) {
+    if (msgEl) {
+      msgEl.textContent = 'No pending verification found. Please sign up again.';
+      msgEl.style.color = '#ff6b6b';
+    }
+    return;
+  }
+
+  // Client-side rate limiting: enforce a 60-second cooldown between sends.
+  var lastSent = parseInt(localStorage.getItem('hymenoptera_last_verification_sent') || '0', 10);
+  var cooldownMs = 60 * 1000;
+  var elapsed = Date.now() - lastSent;
+  if (elapsed < cooldownMs) {
+    var remaining = Math.ceil((cooldownMs - elapsed) / 1000);
+    if (msgEl) {
+      msgEl.textContent = 'Please wait ' + remaining + ' second' + (remaining !== 1 ? 's' : '') + ' before requesting another email.';
+      msgEl.style.color = '#ffcc00';
+    }
+    return;
+  }
+
+  if (msgEl) {
+    msgEl.textContent = 'Sending verification email\u2026';
+    msgEl.style.color = '#aaa';
+  }
+
+  _sendVerificationEmailRequest(email, token)
+    .then(function() {
+      if (msgEl) {
+        msgEl.textContent = 'Verification email sent. Please check your inbox and spam/junk folder.';
+        msgEl.style.color = '#90ee90';
+      }
+      localStorage.setItem('hymenoptera_last_verification_sent', Date.now().toString());
+    })
+    .catch(function(err) {
+      console.error('[resendVerificationEmail] Failed to resend verification email:', err && err.message);
+      if (msgEl) {
+        msgEl.textContent = (err && err.message) || 'Could not send verification email. Please try again later.';
+        msgEl.style.color = '#ff6b6b';
+      }
+    });
 }
 
 function checkVerificationToken() {

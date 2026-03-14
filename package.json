@@ -1,0 +1,13 @@
+{
+  "name": "hymenoptera",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hymenoptera AI Platform",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "nodemailer": "^7.0.11",
+    "stripe": "^16.12.0"
+  }
+}
