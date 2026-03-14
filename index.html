@@ -785,12 +785,94 @@
         0 6px 18px rgba(0,0,0,0.4),
         0 0 12px rgba(229,57,53,0.5);
     }
+
+    /* ===== MOBILE / TABLET DRAWER ===== */
+    .sidebar-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 900;
+    }
+
+    .sidebar-backdrop.active {
+      display: block;
+    }
+
+    .sidebar-menu-btn {
+      display: none;
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 1100;
+      background: #1a2030;
+      border: 1px solid #2a3040;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 20px;
+      width: 38px;
+      height: 38px;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .sidebar-close-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+      line-height: 1;
+      align-self: flex-end;
+      margin-bottom: -4px;
+    }
+
+    .sidebar-close-btn:hover {
+      color: #fff;
+    }
+
+    @media (max-width: 1023px) {
+      .sidebar-menu-btn {
+        display: flex;
+      }
+
+      .sidebar-close-btn {
+        display: block;
+      }
+
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        z-index: 1000;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+      }
+
+      .sidebar.drawer-open {
+        transform: translateX(0);
+      }
+    }
   </style>
 </head>
 <body>
 
+  <!-- Mobile/tablet sidebar backdrop -->
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+  <!-- Mobile/tablet hamburger menu button -->
+  <button class="sidebar-menu-btn" id="sidebar-menu-btn" onclick="openSidebar()" title="Open menu">&#9776;</button>
+
   <!-- Sidebar -->
   <div class="sidebar">
+    <!-- Mobile/tablet close button -->
+    <button class="sidebar-close-btn" id="sidebar-close-btn" onclick="closeSidebar()" title="Close menu">&#10005;</button>
     <div class="sidebar-brand">
       <img src="hymenoptera_logo_transparent.png" alt="Hymenoptera" />
       <div class="sidebar-title">HYMENOPTERA</div>
@@ -1164,6 +1246,35 @@
       document.getElementById('section-signin').classList.toggle('active', tab === 'signin');
       document.getElementById('section-signup').classList.toggle('active', tab === 'signup');
     }
+
+    // ===== MOBILE / TABLET SIDEBAR DRAWER =====
+    var isSidebarOpen = false;
+
+    function openSidebar() {
+      document.querySelector('.sidebar').classList.add('drawer-open');
+      document.getElementById('sidebar-backdrop').classList.add('active');
+      isSidebarOpen = true;
+    }
+
+    function closeSidebar() {
+      document.querySelector('.sidebar').classList.remove('drawer-open');
+      document.getElementById('sidebar-backdrop').classList.remove('active');
+      isSidebarOpen = false;
+    }
+
+    function closeSidebarOnMobile() {
+      if (window.innerWidth < 1024) {
+        closeSidebar();
+      }
+    }
+
+    document.getElementById('sidebar-backdrop').addEventListener('click', closeSidebar);
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && isSidebarOpen) {
+        closeSidebar();
+      }
+    });
   </script>
   
 

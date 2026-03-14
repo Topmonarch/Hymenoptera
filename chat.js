@@ -259,6 +259,7 @@
         saveConversations();
       }
       updateAgentIndicator();
+      if (typeof closeSidebarOnMobile === 'function') closeSidebarOnMobile();
     };
   });
 
@@ -373,6 +374,7 @@
     clearChatUI();
     renderChatHistory();
     renderProjectList();
+    if (typeof closeSidebarOnMobile === 'function') closeSidebarOnMobile();
   }
 
   // Track the currently open chat options menu
@@ -522,6 +524,8 @@
     updateModelIndicator();
     updateAgentIndicator();
     var chatMessages = (conv && conv.messages) ? conv.messages : (Array.isArray(conv) ? conv : []);
+
+    if (typeof closeSidebarOnMobile === 'function') closeSidebarOnMobile();
 
     // Fade out, swap content, fade back in
     if (messagesEl) {
@@ -905,6 +909,7 @@
     if (camBtn) camBtn.title = 'Upload image';
     // Refresh usage counter from backend for the new chat session
     fetchUsageFromBackend();
+    if (typeof closeSidebarOnMobile === 'function') closeSidebarOnMobile();
   };
 
   // Also wire up the send button via event listener
