@@ -615,6 +615,7 @@
       display: none;
       flex-direction: column;
       height: 100%;
+      overflow: hidden;
       position: relative;
     }
 
@@ -699,19 +700,26 @@
 
     #input-area {
       display: flex;
+      align-items: center;
       border-top: 1px solid #1e2530;
       padding: 8px;
+      padding-bottom: max(8px, env(safe-area-inset-bottom));
       gap: 8px;
+      flex-shrink: 0;
+      width: 100%;
+      box-sizing: border-box;
     }
 
     #message-input {
       flex: 1;
+      min-width: 0;
       padding: 12px 14px;
       background: #111;
       color: white;
       border: 1px solid #2a3040;
       border-radius: 6px;
       font-size: 14px;
+      box-sizing: border-box;
     }
 
     #message-input:focus {
@@ -729,6 +737,7 @@
       font-weight: 600;
       cursor: pointer;
       font-size: 14px;
+      flex-shrink: 0;
       box-shadow:
         0 6px 18px rgba(0,0,0,0.4),
         0 0 12px rgba(45,140,255,0.3);
@@ -857,6 +866,49 @@
 
       .sidebar.drawer-open {
         transform: translateX(0);
+      }
+    }
+
+    /* ===== RESPONSIVE CHAT INPUT BAR ===== */
+
+    /* Tablet (medium screens) */
+    @media (max-width: 768px) {
+      #input-area {
+        padding: 6px;
+        padding-bottom: max(6px, env(safe-area-inset-bottom));
+        gap: 5px;
+      }
+
+      .send-btn {
+        padding: 10px 14px;
+        font-size: 13px;
+      }
+
+      #message-input {
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+    }
+
+    /* Mobile phones */
+    @media (max-width: 480px) {
+      #input-area {
+        padding: 5px;
+        padding-bottom: max(5px, env(safe-area-inset-bottom));
+        gap: 4px;
+      }
+
+      .send-btn {
+        padding: 10px 10px;
+        font-size: 13px;
+        min-width: 44px;
+        min-height: 44px;
+      }
+
+      #message-input {
+        padding: 10px 10px;
+        font-size: 14px;
+        min-height: 44px;
       }
     }
   </style>
