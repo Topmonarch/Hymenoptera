@@ -51,13 +51,25 @@
   // Current user plan — defaults to 'starter' for all new users
   var userPlan = localStorage.getItem('hymenoptera_plan') || 'starter';
 
+  // Returns today's date as a stable YYYY-MM-DD string in the Pacific/Auckland timezone.
+  // Using a fixed timezone and date-only format keeps the reset boundary consistent and
+  // avoids locale-dependent output from Date.prototype.toDateString().
+  function getTodayDateString() {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Pacific/Auckland',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date());
+  }
+
   // Daily message usage tracking
   var messagesToday = Number(localStorage.getItem('messagesToday')) || 0;
-  var lastResetDate = localStorage.getItem('lastResetDate') || new Date().toDateString();
+  var lastResetDate = localStorage.getItem('lastResetDate') || getTodayDateString();
 
   // Daily reset check on page load: if the calendar day has changed, reset the counter
   (function () {
-    var today = new Date().toDateString();
+    var today = getTodayDateString();
     if (lastResetDate !== today) {
       messagesToday = 0;
       lastResetDate = today;
@@ -160,6 +172,37 @@
       counter.appendChild(resetNote);
     }
     resetNote.textContent = 'Resets at 12:00 AM';
+  }
+
+  // Fetch the authoritative usage count from the backend and update the local
+  // counter. Called on page load, new chat, and when a day boundary is crossed
+  // so the displayed counter always reflects the backend source of truth.
+  function fetchUsageFromBackend() {
+    try {
+      var hymenAuth = window.hymAuth && window.hymAuth.currentUser;
+      var userId = hymenAuth ? hymenAuth.uid : 'guest';
+      var sessionId = currentChatId || '';
+      var url = '/api/usage?plan=' + encodeURIComponent(userPlan) +
+        '&userId=' + encodeURIComponent(userId) +
+        '&sessionId=' + encodeURIComponent(sessionId);
+      fetch(url).then(function (response) {
+        if (!response.ok) {
+          console.warn('fetchUsageFromBackend: unexpected status', response.status);
+          return;
+        }
+        return response.json();
+      }).then(function (data) {
+        if (data && typeof data.messages_used === 'number') {
+          messagesToday = data.messages_used;
+          localStorage.setItem('messagesToday', messagesToday);
+          updateMessageCounter();
+        }
+      }).catch(function () {
+        // Non-fatal: fall back to locally tracked counter
+      });
+    } catch (e) {
+      // Non-fatal: ignore errors in the refresh path
+    }
   }
 
   function updateWebIndicator() {
@@ -559,13 +602,16 @@
     if (!message) return;
 
     // Daily reset: if the date has changed since last use, reset the counter
-    var today = new Date().toDateString();
+    // and re-fetch usage from the backend to get the authoritative value.
+    var today = getTodayDateString();
     if (today !== lastResetDate) {
       messagesToday = 0;
       lastResetDate = today;
-      localStorage.setItem('messagesToday', messagesToday);
-      localStorage.setItem('lastResetDate', lastResetDate);
+      localStorage.setItem('messagesToday', '0');
+      localStorage.setItem('lastResetDate', today);
       updateMessageCounter();
+      // Refresh counter from backend asynchronously (non-blocking)
+      fetchUsageFromBackend();
     }
 
     // Check plan limit before sending
@@ -857,6 +903,8 @@
     uploadedImageData = '';
     var camBtn = document.getElementById('camera-btn');
     if (camBtn) camBtn.title = 'Upload image';
+    // Refresh usage counter from backend for the new chat session
+    fetchUsageFromBackend();
   };
 
   // Also wire up the send button via event listener
@@ -1276,8 +1324,9 @@
   // Show empty-state on initial load (if chat-screen is visible and no messages)
   showEmptyState();
 
-  // Initialize the message counter display
+  // Initialize the message counter display and refresh from backend
   updateMessageCounter();
+  fetchUsageFromBackend();
 
   // Plan display
   function updatePlanDisplay() {
