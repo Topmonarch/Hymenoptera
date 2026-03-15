@@ -788,10 +788,53 @@
       if (convModel === 'image-generator') {
         var imgHymenAuth = window.hymAuth && window.hymAuth.currentUser;
         var imgUserId = imgHymenAuth ? imgHymenAuth.uid : 'guest';
+
+        // Build reference images list from any pending attachments that were
+        // captured before clearing the tray.
+        var imgRefImages = attachmentsCopy.map(function (a) {
+          return { data: a.dataUrl, mimeType: a.mimeType };
+        });
+
+        // Auto-detect strict fidelity language so the backend can reinforce
+        // prompt construction even if the UI flag was not explicitly set.
+        // Note: this mirrors STRICT_FIDELITY_PATTERNS in api/generate-image.js.
+        // Browser code cannot import server modules, so both copies must stay in sync.
+        var imgStrictMode = imgRefImages.length > 0 && (function (p) {
+          var patterns = [
+            /\bexact(ly)?\b/i,
+            /\bdo\s*not\s*change\b/i,
+            /\bdon'?t\s*change\b/i,
+            /\bpreserve\s*this\b/i,
+            /\bsame\s*design\b/i,
+            /\bmake\s*this\s*realistic\b/i,
+            /\buse\s*this\s*exact\b/i,
+            /\bkeep\s*the\s*design\b/i,
+            /\bput\s*this\s*on\b/i,
+            /\bmake\s*this\s*real\b/i,
+            /\bturn\s*this\s+(?:drawing|sketch|design|image)\b/i,
+            /\bno\s*changes?\b/i,
+            /\bfaithful(ly)?\b/i,
+            /\bfidelity\b/i,
+            /\baccurate(ly)?\b/i
+          ];
+          return patterns.some(function (re) { return re.test(p); });
+        }(message));
+
+        var imgPayload = {
+          prompt: message,
+          plan: userPlan,
+          userId: imgUserId,
+          sessionId: currentChatId
+        };
+        if (imgRefImages.length > 0) {
+          imgPayload.referenceImages = imgRefImages;
+          imgPayload.strictReferenceMode = imgStrictMode;
+        }
+
         var imgResponse = await fetch('/api/generate-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: message, plan: userPlan, userId: imgUserId, sessionId: currentChatId })
+          body: JSON.stringify(imgPayload)
         });
         clearInterval(dotInterval);
         if (!imgResponse.ok) {
