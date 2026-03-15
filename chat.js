@@ -36,6 +36,63 @@
   // Stores captured or uploaded image (base64 data URL)
   var uploadedImageData = "";
 
+  // Pending image attachments: array of {id, dataUrl, mimeType, name}
+  // Images stay here until the user presses Send.
+  var pendingImageAttachments = [];
+  var _attachmentIdCounter = 0;
+
+  // Render the attachment tray with thumbnails and remove buttons.
+  function renderAttachmentTray() {
+    var tray = document.getElementById('attachment-tray');
+    if (!tray) return;
+    if (pendingImageAttachments.length === 0) {
+      tray.style.display = 'none';
+      tray.innerHTML = '';
+      return;
+    }
+    tray.style.display = 'flex';
+    tray.innerHTML = '';
+    pendingImageAttachments.forEach(function (att) {
+      var item = document.createElement('div');
+      item.className = 'attachment-item';
+      var img = document.createElement('img');
+      img.src = att.dataUrl;
+      img.alt = att.name;
+      img.className = 'attachment-thumb';
+      var removeBtn = document.createElement('button');
+      removeBtn.className = 'attachment-remove';
+      removeBtn.textContent = '\u00d7';
+      removeBtn.title = 'Remove ' + att.name;
+      // Remove by unique ID so indices never mismatch after a prior deletion
+      (function (id) {
+        removeBtn.addEventListener('click', function () {
+          pendingImageAttachments = pendingImageAttachments.filter(function (a) { return a.id !== id; });
+          renderAttachmentTray();
+        });
+      }(att.id));
+      item.appendChild(img);
+      item.appendChild(removeBtn);
+      tray.appendChild(item);
+    });
+  }
+
+  // Add an image to pending attachments.
+  // dataUrl: full data URL (data:image/...;base64,...)
+  function addImageAttachment(dataUrl, mimeType, name) {
+    if (pendingImageAttachments.length >= 20) {
+      alert('Maximum 20 images per message.');
+      return;
+    }
+    pendingImageAttachments.push({
+      id: ++_attachmentIdCounter,
+      dataUrl: dataUrl,
+      mimeType: mimeType || 'image/jpeg',
+      name: name || 'image'
+    });
+    renderAttachmentTray();
+    if (messageInput) messageInput.focus();
+  }
+
   // Projects: containers for chats and files
   var projects = {};
   var currentProject = 'Default';
@@ -525,6 +582,10 @@
     updateAgentIndicator();
     var chatMessages = (conv && conv.messages) ? conv.messages : (Array.isArray(conv) ? conv : []);
 
+    // Clear any pending image attachments when switching conversations
+    pendingImageAttachments = [];
+    renderAttachmentTray();
+
     if (typeof closeSidebarOnMobile === 'function') closeSidebarOnMobile();
 
     // Fade out, swap content, fade back in
@@ -603,7 +664,8 @@
   async function sendMessage() {
     if (!messageInput) return;
     var message = (messageInput.value || '').trim();
-    if (!message) return;
+    // Allow send when there is text OR pending image attachments
+    if (!message && pendingImageAttachments.length === 0) return;
 
     // Daily reset: if the date has changed since last use, reset the counter
     // and re-fetch usage from the backend to get the authoritative value.
@@ -645,11 +707,50 @@
 
     // Append user message to conversation memory before sending.
     // The full history (all prior messages + this new one) will be sent to the backend.
-    conversations[currentChatId].messages.push({ role: 'user', content: message });
-    addMessage('user', message);
-    saveMessageToHistory({ role: 'user', content: message });
+    // When images are attached, store a text summary in history and show thumbnails in the bubble.
+    var attachmentsCopy = pendingImageAttachments.slice(); // snapshot before clearing
+    var historyContent = message;
+    if (attachmentsCopy.length > 0) {
+      var imgLabel = attachmentsCopy.length === 1
+        ? '\uD83D\uDDBC\uFE0F 1 image attached'
+        : '\uD83D\uDDBC\uFE0F ' + attachmentsCopy.length + ' images attached';
+      historyContent = message ? message + '\n' + imgLabel : imgLabel;
+    }
+    conversations[currentChatId].messages.push({ role: 'user', content: historyContent });
+    // Show the user bubble with optional image thumbnails
+    if (attachmentsCopy.length > 0) {
+      var userBubble = document.createElement('div');
+      userBubble.className = 'message user';
+      if (message) {
+        var textNode = document.createElement('div');
+        textNode.style.marginBottom = '6px';
+        textNode.innerText = message;
+        userBubble.appendChild(textNode);
+      }
+      var thumbRow = document.createElement('div');
+      thumbRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
+      attachmentsCopy.forEach(function (att) {
+        var tImg = document.createElement('img');
+        tImg.src = att.dataUrl;
+        tImg.alt = att.name;
+        tImg.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;';
+        thumbRow.appendChild(tImg);
+      });
+      userBubble.appendChild(thumbRow);
+      if (messagesEl) {
+        hideEmptyState();
+        messagesEl.appendChild(userBubble);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+    } else {
+      addMessage('user', message);
+    }
+    saveMessageToHistory({ role: 'user', content: historyContent });
     saveConversations();
     messageInput.value = '';
+    // Clear pending attachments after capturing them
+    pendingImageAttachments = [];
+    renderAttachmentTray();
 
     // Show thinking status and create a typing indicator bubble
     setStatus('Thinking...');
@@ -757,7 +858,7 @@
       var response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel, hiveMode: hiveMode, fileContext: uploadedFileContent, image: uploadedImageData, webAccess: webAccess })
+        body: JSON.stringify({ messages: conversations[currentChatId].messages, agent: convAgent, systemPrompt: agents[convAgent].systemPrompt, model: convModel, hiveMode: hiveMode, fileContext: uploadedFileContent, image: uploadedImageData, images: attachmentsCopy.map(function (a) { return { data: a.dataUrl, mimeType: a.mimeType }; }), webAccess: webAccess })
       });
 
       if (!response.ok) {
@@ -907,6 +1008,9 @@
     uploadedImageData = '';
     var camBtn = document.getElementById('camera-btn');
     if (camBtn) camBtn.title = 'Upload image';
+    // Clear any pending image attachments for the new conversation
+    pendingImageAttachments = [];
+    renderAttachmentTray();
     // Refresh usage counter from backend for the new chat session
     fetchUsageFromBackend();
     if (typeof closeSidebarOnMobile === 'function') closeSidebarOnMobile();
@@ -1045,53 +1149,67 @@
   // File upload: detect file type and route accordingly.
   // • Text / code files: read as text for use as chat context (existing behaviour) AND
   //   send to /api/upload-file for AI analysis.
-  // • Images, PDFs, videos: read as base64 and send to /api/upload-file.
+  // • Images: add to pending attachment tray so user can compose text before sending.
+  // • PDFs, videos: read as base64 and send to /api/upload-file for immediate analysis.
   var fileUploadInput = document.getElementById('file-upload');
   if (fileUploadInput) {
     fileUploadInput.addEventListener('change', function (event) {
-      var file = event.target.files[0];
-      if (!file) return;
+      var files = Array.prototype.slice.call(event.target.files);
+      if (!files.length) return;
       var fileUploadBtn = document.getElementById('file-upload-button');
-      var category = detectUploadCategory(file);
 
-      if (category === 'text') {
-        // Original behaviour: read as UTF-8 text and store as context.
-        var textReader = new FileReader();
-        textReader.onload = function (e) {
-          uploadedFileContent = e.target.result;
-          if (!projects[currentProject]) projects[currentProject] = { files: [] };
-          if (!projects[currentProject].files) projects[currentProject].files = [];
-          projects[currentProject].files.push(uploadedFileContent);
-          saveConversations();
-          if (fileUploadBtn) fileUploadBtn.title = 'File loaded: ' + file.name;
+      files.forEach(function (file) {
+        var category = detectUploadCategory(file);
 
-          // Also send to upload endpoint for inline AI analysis.
+        if (category === 'image') {
+          // Images: store in pending tray instead of auto-sending.
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            addImageAttachment(e.target.result, file.type, file.name);
+          };
+          reader.onerror = function () {
+            if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
+          };
+          reader.readAsDataURL(file);
+        } else if (category === 'text') {
+          // Original behaviour: read as UTF-8 text and store as context.
+          var textReader = new FileReader();
+          textReader.onload = function (e) {
+            uploadedFileContent = e.target.result;
+            if (!projects[currentProject]) projects[currentProject] = { files: [] };
+            if (!projects[currentProject].files) projects[currentProject].files = [];
+            projects[currentProject].files.push(uploadedFileContent);
+            saveConversations();
+            if (fileUploadBtn) fileUploadBtn.title = 'File loaded: ' + file.name;
+
+            // Also send to upload endpoint for inline AI analysis.
+            var b64Reader = new FileReader();
+            b64Reader.onload = function (ev) {
+              var dataUrl = ev.target.result || '';
+              var base64 = dataUrl.indexOf(',') !== -1 ? dataUrl.split(',')[1] : dataUrl;
+              processUploadedFile(file, base64, category);
+            };
+            b64Reader.readAsDataURL(file);
+          };
+          textReader.onerror = function () {
+            uploadedFileContent = '';
+            if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
+          };
+          textReader.readAsText(file);
+        } else {
+          // PDF, video: read as base64 DataURL, strip the prefix, send to endpoint.
           var b64Reader = new FileReader();
           b64Reader.onload = function (ev) {
             var dataUrl = ev.target.result || '';
             var base64 = dataUrl.indexOf(',') !== -1 ? dataUrl.split(',')[1] : dataUrl;
             processUploadedFile(file, base64, category);
           };
+          b64Reader.onerror = function () {
+            if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
+          };
           b64Reader.readAsDataURL(file);
-        };
-        textReader.onerror = function () {
-          uploadedFileContent = '';
-          if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
-        };
-        textReader.readAsText(file);
-      } else {
-        // Image, PDF, video: read as base64 DataURL, strip the prefix, send to endpoint.
-        var b64Reader = new FileReader();
-        b64Reader.onload = function (ev) {
-          var dataUrl = ev.target.result || '';
-          var base64 = dataUrl.indexOf(',') !== -1 ? dataUrl.split(',')[1] : dataUrl;
-          processUploadedFile(file, base64, category);
-        };
-        b64Reader.onerror = function () {
-          if (fileUploadBtn) fileUploadBtn.title = 'File upload failed';
-        };
-        b64Reader.readAsDataURL(file);
-      }
+        }
+      });
 
       // Reset the input so the same file can be re-selected.
       event.target.value = '';
@@ -1109,7 +1227,7 @@
     if (camBtnEl) camBtnEl.style.display = 'inline-block';
   }
 
-  // Camera / image input: open file picker for images (native camera on mobile), convert to base64
+  // Camera / image input: open file picker for images (native camera on mobile), add to pending tray
   var cameraBtn = document.getElementById('camera-btn');
   if (cameraBtn) {
     cameraBtn.addEventListener('click', function () {
@@ -1125,14 +1243,67 @@
         if (!file) return;
         var reader = new FileReader();
         reader.onload = function (e) {
-          uploadedImageData = e.target.result;
-          cameraBtn.title = 'Image loaded: ' + file.name;
+          addImageAttachment(e.target.result, file.type, file.name);
         };
         reader.readAsDataURL(file);
       };
       input.click();
     });
   }
+
+  // Paste handler: intercept pasted images and add to pending attachment tray.
+  document.addEventListener('paste', function (e) {
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    var hasImage = false;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        hasImage = true;
+        var file = items[i].getAsFile();
+        if (!file) continue;
+        (function (f) {
+          var reader = new FileReader();
+          reader.onload = function (ev) {
+            addImageAttachment(ev.target.result, f.type, 'pasted-image.png');
+          };
+          reader.readAsDataURL(f);
+        }(file));
+      }
+    }
+    // If an image was pasted, prevent default paste into the text input
+    if (hasImage) e.preventDefault();
+  });
+
+  // Drag-and-drop handler on the messages/input area: add dropped images to pending tray.
+  var chatMain = document.getElementById('chat-main') || document.body;
+  chatMain.addEventListener('dragover', function (e) {
+    var hasFiles = false;
+    if (e.dataTransfer && e.dataTransfer.types) {
+      for (var i = 0; i < e.dataTransfer.types.length; i++) {
+        if (e.dataTransfer.types[i] === 'Files') { hasFiles = true; break; }
+      }
+    }
+    if (hasFiles) e.preventDefault();
+  });
+  chatMain.addEventListener('drop', function (e) {
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if (!files || !files.length) return;
+    var hasImage = false;
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      if (f.type.indexOf('image/') === 0) {
+        hasImage = true;
+        (function (file) {
+          var reader = new FileReader();
+          reader.onload = function (ev) {
+            addImageAttachment(ev.target.result, file.type, file.name);
+          };
+          reader.readAsDataURL(file);
+        }(f));
+      }
+    }
+    if (hasImage) e.preventDefault();
+  });
 
   // Voice input: use Web Speech API to fill the chat input with spoken text
   var recognition = window.SpeechRecognition || window.webkitSpeechRecognition
