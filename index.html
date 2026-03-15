@@ -704,14 +704,86 @@
 
     #input-area {
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      align-items: stretch;
       border-top: 1px solid #1e2530;
       padding: 8px;
       padding-bottom: max(8px, env(safe-area-inset-bottom));
-      gap: 8px;
+      gap: 6px;
       flex-shrink: 0;
       width: 100%;
       box-sizing: border-box;
+    }
+
+    #input-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+
+    /* Attachment tray: shown above the input row when images are pending */
+    #attachment-tray {
+      display: none;
+      flex-wrap: nowrap;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 4px 2px;
+      scrollbar-width: thin;
+      scrollbar-color: #2a3040 transparent;
+    }
+
+    #attachment-tray::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    #attachment-tray::-webkit-scrollbar-thumb {
+      background: #2a3040;
+      border-radius: 2px;
+    }
+
+    .attachment-item {
+      position: relative;
+      flex-shrink: 0;
+      width: 60px;
+      height: 60px;
+      border-radius: 6px;
+      overflow: visible;
+      border: 1px solid #2a3040;
+    }
+
+    .attachment-thumb {
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 6px;
+      display: block;
+    }
+
+    .attachment-remove {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 18px;
+      height: 18px;
+      background: #e53935;
+      border: none;
+      border-radius: 50%;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 18px;
+      text-align: center;
+      cursor: pointer;
+      padding: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .attachment-remove:hover {
+      background: #b71c1c;
     }
 
     #message-input {
@@ -880,6 +952,10 @@
       #input-area {
         padding: 6px;
         padding-bottom: max(6px, env(safe-area-inset-bottom));
+        gap: 4px;
+      }
+
+      #input-row {
         gap: 5px;
       }
 
@@ -892,6 +968,12 @@
         padding: 10px 12px;
         font-size: 14px;
       }
+
+      .attachment-item,
+      .attachment-thumb {
+        width: 52px;
+        height: 52px;
+      }
     }
 
     /* Mobile phones */
@@ -899,6 +981,10 @@
       #input-area {
         padding: 5px;
         padding-bottom: max(5px, env(safe-area-inset-bottom));
+        gap: 4px;
+      }
+
+      #input-row {
         gap: 4px;
       }
 
@@ -913,6 +999,12 @@
         padding: 10px 10px;
         font-size: 14px;
         min-height: 44px;
+      }
+
+      .attachment-item,
+      .attachment-thumb {
+        width: 48px;
+        height: 48px;
       }
     }
   </style>
@@ -1055,14 +1147,18 @@
       <div id="messages"></div>
 
       <div id="input-area">
-        <input id="message-input" placeholder="Ask something..."
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}" />
-        <input type="file" id="file-upload" accept=".txt,.md,.js,.ts,.jsx,.tsx,.py,.html,.htm,.css,.json,.xml,.yaml,.yml,.sh,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.csv,.log,.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp4,.mov,.avi,.webm,.mkv" style="display:none;" />
-        <button id="file-upload-button" class="send-btn" onclick="document.getElementById('file-upload').click()" title="Upload file">📎</button>
-        <button id="camera-btn" class="send-btn" title="Upload image">📷</button>
-        <button id="voice-btn" class="send-btn" title="Voice input">🎤</button>
-        <!-- send button text is white, glow remains blue -->
-        <button class="send-btn glow" onclick="sendMessage()">Send</button>
+        <!-- Attachment preview tray: shown above input row when images are pending -->
+        <div id="attachment-tray"></div>
+        <div id="input-row">
+          <input id="message-input" placeholder="Ask something..."
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}" />
+          <input type="file" id="file-upload" accept=".txt,.md,.js,.ts,.jsx,.tsx,.py,.html,.htm,.css,.json,.xml,.yaml,.yml,.sh,.java,.c,.cpp,.go,.rs,.rb,.php,.sql,.csv,.log,.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp4,.mov,.avi,.webm,.mkv" style="display:none;" multiple />
+          <button id="file-upload-button" class="send-btn" onclick="document.getElementById('file-upload').click()" title="Upload file">📎</button>
+          <button id="camera-btn" class="send-btn" title="Upload image">📷</button>
+          <button id="voice-btn" class="send-btn" title="Voice input">🎤</button>
+          <!-- send button text is white, glow remains blue -->
+          <button class="send-btn glow" onclick="sendMessage()">Send</button>
+        </div>
       </div>
 
     </div>

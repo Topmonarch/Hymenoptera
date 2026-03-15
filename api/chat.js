@@ -64,12 +64,33 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { messages, systemPrompt, agent, model, hiveMode, fileContext, image, video, webAccess, sessionId, userId, plan } = req.body || {};
+    const { messages, systemPrompt, agent, model, hiveMode, fileContext, image, images, video, webAccess, sessionId, userId, plan } = req.body || {};
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       res.setHeader('Content-Type', 'application/json');
       return res.status(400).json({ error: { message: 'messages array required' } });
     }
+
+    // Normalise images: accept both the legacy single `image` field and the new `images` array.
+    // Each entry in imageList is { data, mimeType } where data is a valid data URL or base64 string.
+    const DATA_URL_PATTERN = /^data:image\/[a-z0-9.+-]+;base64,/i;
+    const imageList = [];
+    if (images && Array.isArray(images) && images.length > 0) {
+      images.forEach(function (img) {
+        if (
+          img &&
+          typeof img === 'object' &&
+          typeof img.data === 'string' &&
+          img.data.length > 0 &&
+          (DATA_URL_PATTERN.test(img.data) || /^[A-Za-z0-9+/]/.test(img.data))
+        ) {
+          imageList.push(img);
+        }
+      });
+    } else if (image && typeof image === 'string' && image.length > 0) {
+      imageList.push({ data: image, mimeType: 'image/jpeg' });
+    }
+    const hasImages = imageList.length > 0;
 
     // Enforce daily usage limits when the helper module is available.
     // The user is identified by userId (if provided) or sessionId as a fallback.
@@ -79,11 +100,11 @@ module.exports = async function handler(req, res) {
       if (trackingId) {
         try {
           // Detect the action type from the request fields.
-          // video flag → 'video', image flag → 'image', everything else → 'message'
+          // video flag → 'video', attached images → 'image', everything else → 'message'
           let actionType = 'message';
           if (video) {
             actionType = 'video';
-          } else if (image) {
+          } else if (hasImages) {
             actionType = 'image';
           }
 
@@ -173,12 +194,41 @@ module.exports = async function handler(req, res) {
         }
       }
 
+      // When images are attached, transform the last user message into a multimodal
+      // content array so the vision model can analyse the images in context.
+      let finalChatMessages = chatMessages;
+      if (hasImages) {
+        const lastMsg = chatMessages[chatMessages.length - 1];
+        if (lastMsg && lastMsg.role === 'user') {
+          const contentParts = [];
+          // Include any text the user typed
+          if (lastMsg.content && typeof lastMsg.content === 'string') {
+            // Strip any image-label suffix appended by the frontend
+            const textOnly = lastMsg.content.replace(/\n?[\uD83D\uDDBC\uFE0F]+\s*\d*\s*image[s]?\s*attached\s*$/i, '').trim();
+            if (textOnly) contentParts.push({ type: 'text', text: textOnly });
+          }
+          // Append each image as an image_url content part
+          imageList.forEach(function (img) {
+            const mimeType = (img.mimeType || 'image/jpeg').split(';')[0].trim();
+            const dataUrl = img.data;
+            // dataUrl may already be a full data URL or raw base64
+            const url = dataUrl.startsWith('data:') ? dataUrl : `data:${mimeType};base64,${dataUrl}`;
+            contentParts.push({ type: 'image_url', image_url: { url, detail: 'auto' } });
+          });
+          if (contentParts.length > 0) {
+            finalChatMessages = [
+              ...chatMessages.slice(0, -1),
+              { role: 'user', content: contentParts }
+            ];
+          }
+        }
+      }
+
       const apiMessages = [
         { role: 'system', content: resolvedSystemPrompt },
         ...(fileContext && fileContext.length > 0 ? [{ role: 'system', content: 'The following document was uploaded by the user. Use it as reference when answering:\n\n' + fileContext }] : []),
-        ...(image ? [{ role: 'system', content: 'The user has uploaded an image. Analyze the image when responding.' }] : []),
         ...(webResults ? [{ role: 'system', content: 'WEB SEARCH RESULTS:\n' + webResults }] : []),
-        ...chatMessages
+        ...finalChatMessages
       ];
 
       // Send the full conversation history (system prompt + all prior turns) to OpenAI.
@@ -279,12 +329,32 @@ module.exports = async function handler(req, res) {
       }
 
       async function callAgent(agentName) {
+        // Build the hive messages; if images were attached, add them to the last user message.
+        let hiveMessages = messages;
+        if (hasImages) {
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role === 'user') {
+            const contentParts = [];
+            if (lastMsg.content && typeof lastMsg.content === 'string') {
+              const textOnly = lastMsg.content.replace(/\n?[\uD83D\uDDBC\uFE0F]+\s*\d*\s*image[s]?\s*attached\s*$/i, '').trim();
+              if (textOnly) contentParts.push({ type: 'text', text: textOnly });
+            }
+            imageList.forEach(function (img) {
+              const mimeType = (img.mimeType || 'image/jpeg').split(';')[0].trim();
+              const dataUrl = img.data;
+              const url = dataUrl.startsWith('data:') ? dataUrl : `data:${mimeType};base64,${dataUrl}`;
+              contentParts.push({ type: 'image_url', image_url: { url, detail: 'auto' } });
+            });
+            if (contentParts.length > 0) {
+              hiveMessages = [...messages.slice(0, -1), { role: 'user', content: contentParts }];
+            }
+          }
+        }
         const agentMessages = [
           { role: 'system', content: hiveAgents[agentName] },
           ...(fileContext && fileContext.length > 0 ? [{ role: 'system', content: 'The following document was uploaded by the user. Use it as reference when answering:\n\n' + fileContext }] : []),
-          ...(image ? [{ role: 'system', content: 'The user has uploaded an image. Analyze the image when responding.' }] : []),
           ...(hiveWebResults ? [{ role: 'system', content: 'The following web research results are available:\n' + hiveWebResults }] : []),
-          ...messages
+          ...hiveMessages
         ];
         // Route hive-mode agent calls through the worker queue to limit concurrency.
         const upstream = await processRequest({
