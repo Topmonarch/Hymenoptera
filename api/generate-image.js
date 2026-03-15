@@ -1,18 +1,27 @@
 // api/generate-image.js — Vercel serverless handler for /api/generate-image
 //
-// Accepts POST { prompt, userId, plan, sessionId, size, quality }
-//   prompt    : text description of the image to generate (string, required)
-//   userId    : authenticated user ID or 'guest' (string, optional)
-//   plan      : subscription plan name (string, optional)
-//   sessionId : anonymous session ID (string, optional)
-//   size      : image size — '1024x1024' | '1792x1024' | '1024x1792' (string, optional)
-//   quality   : 'standard' | 'hd' (string, optional)
+// Accepts POST { prompt, userId, plan, sessionId, size, quality,
+//                referenceImages, strictReferenceMode }
+//   prompt             : text description / scene instructions (string, required)
+//   userId             : authenticated user ID or 'guest' (string, optional)
+//   plan               : subscription plan name (string, optional)
+//   sessionId          : anonymous session ID (string, optional)
+//   size               : image size — '1024x1024' | '1792x1024' | '1024x1792' (optional)
+//   quality            : 'standard' | 'hd' (string, optional)
+//   referenceImages    : array of { data: string, mimeType: string } — uploaded reference
+//                        images to follow when generating (optional)
+//   strictReferenceMode: boolean — when true (or auto-detected from the prompt) the
+//                        reference image is treated as the design blueprint and the text
+//                        prompt only controls scene/context (optional)
 //
 // The endpoint:
 //   1. Validates the request fields.
 //   2. Checks the daily image generation quota via usageLimits.
-//   3. Calls OpenAI DALL-E 3 to generate the image.
-//   4. Returns { imageUrl: "<url>", revisedPrompt: "<text>" } as JSON.
+//   3. When strictReferenceMode is active and reference images are provided, uses
+//      GPT-4o Vision to produce a structured design analysis of the reference, then
+//      builds a fidelity-reinforced prompt before calling DALL-E 3.
+//   4. Calls OpenAI DALL-E 3 to generate the image.
+//   5. Returns { imageUrl: "<url>", revisedPrompt: "<text>" } as JSON.
 //
 // The existing /api/chat endpoint is NOT modified.
 
@@ -33,6 +42,172 @@ const ALLOWED_SIZES = ['1024x1024', '1792x1024', '1024x1792'];
 // Allowed quality values for DALL-E 3.
 const ALLOWED_QUALITY = ['standard', 'hd'];
 
+// Maximum characters accepted by the DALL-E 3 prompt field.
+const DALLE3_MAX_PROMPT_LENGTH = 4000;
+
+// Pattern for validating data URLs containing base64-encoded images.
+// Used in multiple places; defined once here to ensure consistency.
+const DATA_URL_PATTERN = /^data:image\/[a-z0-9.+-]+;base64,/i;
+
+// Regex patterns that indicate a strict fidelity request in the user's prompt.
+// When any of these match, strictReferenceMode is automatically enabled.
+const STRICT_FIDELITY_PATTERNS = [
+  /\bexact(ly)?\b/i,
+  /\bdo\s*not\s*change\b/i,
+  /\bdon'?t\s*change\b/i,
+  /\bpreserve\s*this\b/i,
+  /\bsame\s*design\b/i,
+  /\bmake\s*this\s*realistic\b/i,
+  /\buse\s*this\s*exact\b/i,
+  /\bkeep\s*the\s*design\b/i,
+  /\bput\s*this\s*on\b/i,
+  /\bmake\s*this\s*real\b/i,
+  /\bturn\s*this\s+(?:drawing|sketch|design|image)\b/i,
+  /\bno\s*changes?\b/i,
+  /\bfaithful(ly)?\b/i,
+  /\bfidelity\b/i,
+  /\baccurate(ly)?\b/i,
+];
+
+/**
+ * Returns true when the prompt text contains language that strongly requests
+ * high-fidelity reproduction of a reference image.
+ *
+ * @param {string} prompt
+ * @returns {boolean}
+ */
+function detectStrictFidelityMode(prompt) {
+  if (!prompt || typeof prompt !== 'string') return false;
+  return STRICT_FIDELITY_PATTERNS.some(function (re) { return re.test(prompt); });
+}
+
+/**
+ * Calls GPT-4o Vision to produce a structured design analysis of the first
+ * (primary blueprint) reference image.  The analysis is used to build a
+ * fidelity-reinforced DALL-E 3 prompt.
+ *
+ * @param {string} apiKey          OpenAI API key
+ * @param {{ data: string, mimeType: string }[]} referenceImages
+ * @returns {Promise<string>}      Structured text description, or '' on failure
+ */
+async function analyzeReferenceImage(apiKey, referenceImages) {
+  if (!referenceImages || referenceImages.length === 0) return '';
+
+  // Build image_url parts for the analysis request.
+  // Primary blueprint = first image; additional images included as supporting refs.
+  const imageParts = referenceImages.slice(0, 4).map(function (img) {
+    const mimeType = (img.mimeType || 'image/jpeg').split(';')[0].trim();
+    const url = img.data.startsWith('data:') ? img.data : ('data:' + mimeType + ';base64,' + img.data);
+    return { type: 'image_url', image_url: { url: url, detail: 'high' } };
+  }).filter(function (part) {
+    return DATA_URL_PATTERN.test(part.image_url.url) || /^data:image\//.test(part.image_url.url);
+  });
+
+  if (imageParts.length === 0) return '';
+
+  const analysisMessages = [
+    {
+      role: 'system',
+      content:
+        'You are a precise visual design analyst. Examine the provided reference image(s) and produce a ' +
+        'structured design description that will be used to guide a faithful image recreation. ' +
+        'Be concise but comprehensive. Focus only on visual/design attributes — no commentary.'
+    },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text:
+            'Analyze this reference image and describe its visual design in structured detail. ' +
+            'Cover these attributes where applicable:\n' +
+            '- Object or garment category\n' +
+            '- Overall silhouette and outline shape\n' +
+            '- Proportions and key dimensions\n' +
+            '- Major color zones and color blocking\n' +
+            '- Stripe, marking, or pattern layout\n' +
+            '- Material or texture cues\n' +
+            '- Seams, panels, and structural elements\n' +
+            '- Edge shapes and profile\n' +
+            '- Openings or cutouts\n' +
+            '- Placement of distinctive features\n' +
+            '- Front/side/profile cues visible\n\n' +
+            'Output a concise structured description only. No preamble.'
+        },
+        ...imageParts
+      ]
+    }
+  ];
+
+  try {
+    const visionRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: analysisMessages,
+        max_tokens: 600,
+        temperature: 0.2
+      })
+    });
+    if (!visionRes.ok) return '';
+    const visionData = await visionRes.json();
+    const content =
+      visionData.choices &&
+      visionData.choices[0] &&
+      visionData.choices[0].message &&
+      visionData.choices[0].message.content;
+    return (typeof content === 'string' ? content.trim() : '');
+  } catch (e) {
+    console.warn('api/generate-image: reference image analysis failed:', e.message);
+    return '';
+  }
+}
+
+/**
+ * Builds a fidelity-reinforced DALL-E 3 prompt that instructs the model to
+ * treat the reference design as the authoritative blueprint while using the
+ * user's text only for scene / context / environment.
+ *
+ * @param {string} userPrompt       Original text from the user
+ * @param {string} designAnalysis   Structured design description from GPT-4o
+ * @param {boolean} hasMultipleRefs Whether secondary reference images were provided
+ * @returns {string}
+ */
+function buildStrictReferencePrompt(userPrompt, designAnalysis, hasMultipleRefs) {
+  const blueprintSection = designAnalysis
+    ? 'DESIGN BLUEPRINT (from uploaded reference image):\n' + designAnalysis
+    : 'DESIGN BLUEPRINT: Follow the uploaded reference image exactly as the design source.';
+
+  const secondaryNote = hasMultipleRefs
+    ? '\nSecondary reference image(s) may provide material, realism, or lighting guidance but must NOT override the primary blueprint design.'
+    : '';
+
+  return (
+    '[STRICT REFERENCE FIDELITY — PRESERVE DESIGN EXACTLY]\n\n' +
+    blueprintSection +
+    secondaryNote +
+    '\n\nSCENE / CONTEXT INSTRUCTION (from user):\n' + userPrompt +
+    '\n\nCRITICAL GENERATION RULES — DO NOT DEVIATE:\n' +
+    '- The uploaded reference image IS the design blueprint. Reproduce it faithfully.\n' +
+    '- Preserve the exact overall silhouette and outer contour.\n' +
+    '- Maintain all proportions and major geometry precisely.\n' +
+    '- Keep every color zone, color block, and color layout exactly as in the reference.\n' +
+    '- Preserve all stripes, markings, and pattern layouts without alteration.\n' +
+    '- Maintain panel placement, visible seams, and structural elements.\n' +
+    '- Keep the shape of any openings, cutouts, and edge profiles intact.\n' +
+    '- Preserve placement of all distinctive features.\n' +
+    '- Only change what the scene instruction explicitly requests: pose, subject, environment, lighting, background, realism level.\n' +
+    '- DO NOT redesign, reinvent, or creatively alter the uploaded design.\n' +
+    '- DO NOT randomly shift colors, add extra features, or change the silhouette.\n' +
+    '- DO NOT treat the reference as loose inspiration — reproduce it exactly.\n' +
+    '- Bias strongly toward fidelity over creativity.'
+  );
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Content-Type', 'application/json');
@@ -46,7 +221,9 @@ module.exports = async function handler(req, res) {
       plan,
       sessionId,
       size,
-      quality
+      quality,
+      referenceImages,
+      strictReferenceMode
     } = req.body || {};
 
     // ── Input validation ────────────────────────────────────────────────────
@@ -57,7 +234,7 @@ module.exports = async function handler(req, res) {
     }
 
     // Sanitize prompt: trim whitespace and limit length to avoid abuse.
-    const safePrompt = prompt.trim().slice(0, 4000);
+    const safePrompt = prompt.trim().slice(0, DALLE3_MAX_PROMPT_LENGTH);
 
     const resolvedSize = ALLOWED_SIZES.includes(size) ? size : '1024x1024';
     const resolvedQuality = ALLOWED_QUALITY.includes(quality) ? quality : 'standard';
@@ -85,12 +262,59 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    // ── Strict reference mode resolution ───────────────────────────────────
+    // Normalise the reference images list (mirrors the pattern used in api/chat.js).
+    const refImageList = [];
+    if (Array.isArray(referenceImages) && referenceImages.length > 0) {
+      referenceImages.forEach(function (img) {
+        if (
+          img &&
+          typeof img === 'object' &&
+          typeof img.data === 'string' &&
+          img.data.length > 0 &&
+          (DATA_URL_PATTERN.test(img.data) || /^[A-Za-z0-9+/]/.test(img.data))
+        ) {
+          refImageList.push(img);
+        }
+      });
+    }
+    const hasReferenceImages = refImageList.length > 0;
+
+    // Enable strict mode when explicitly requested OR when the prompt text
+    // contains language that strongly indicates fidelity preservation.
+    const isStrictMode =
+      hasReferenceImages &&
+      (strictReferenceMode === true || detectStrictFidelityMode(safePrompt));
+
+    if (isStrictMode) {
+      console.log(
+        'api/generate-image: strict reference fidelity mode ACTIVE — ' +
+        refImageList.length + ' reference image(s), prompt snippet: "' +
+        safePrompt.slice(0, 80) + '"'
+      );
+    }
+
     // ── OpenAI DALL-E 3 API call ────────────────────────────────────────────
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       res.setHeader('Content-Type', 'application/json');
       return res.status(500).json({ error: { message: 'API key not configured' } });
+    }
+
+    // When strict mode is active, analyse the reference image with GPT-4o
+    // Vision to derive a structured design description, then build a
+    // fidelity-reinforced prompt for DALL-E 3.
+    let finalPrompt = safePrompt;
+    if (isStrictMode) {
+      const designAnalysis = await analyzeReferenceImage(apiKey, refImageList);
+      finalPrompt = buildStrictReferencePrompt(
+        safePrompt,
+        designAnalysis,
+        refImageList.length > 1
+      );
+      // DALL-E 3 prompt character limit.
+      finalPrompt = finalPrompt.slice(0, DALLE3_MAX_PROMPT_LENGTH);
     }
 
     const openaiRes = await fetch('https://api.openai.com/v1/images/generations', {
@@ -101,7 +325,7 @@ module.exports = async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'dall-e-3',
-        prompt: safePrompt,
+        prompt: finalPrompt,
         n: 1,
         size: resolvedSize,
         quality: resolvedQuality,
