@@ -1,7 +1,7 @@
 // api/generate-image.js — Vercel serverless handler for /api/generate-image
 //
 // Accepts POST { prompt, userId, plan, sessionId, size, quality,
-//                referenceImages, strictReferenceMode }
+//                referenceImages, strictReferenceMode, referenceFidelity }
 //   prompt             : text description / scene instructions (string, required)
 //   userId             : authenticated user ID or 'guest' (string, optional)
 //   plan               : subscription plan name (string, optional)
@@ -10,16 +10,25 @@
 //   quality            : 'standard' | 'hd' (string, optional)
 //   referenceImages    : array of { data: string, mimeType: string } — uploaded reference
 //                        images to follow when generating (optional)
-//   strictReferenceMode: boolean — when true (or auto-detected from the prompt) the
-//                        reference image is treated as the design blueprint and the text
-//                        prompt only controls scene/context (optional)
+//   strictReferenceMode: boolean — legacy flag; when true (or auto-detected from the
+//                        prompt) activates high-fidelity reference mode (optional)
+//   referenceFidelity  : 'balanced' | 'high' | 'exact' — controls how closely the
+//                        generated image follows the reference.  When omitted the value
+//                        is derived from strictReferenceMode / prompt auto-detection.
+//                        'balanced' — standard generation even when a reference is
+//                          present (no strict prompt reinforcement).
+//                        'high'    — reference is used as the design blueprint; the
+//                          fidelity-reinforced prompt is applied (default when a
+//                          reference image is uploaded).
+//                        'exact'   — maximum reference preservation; creativity is
+//                          further suppressed and additional constraints are injected.
 //
 // The endpoint:
 //   1. Validates the request fields.
 //   2. Checks the daily image generation quota via usageLimits.
-//   3. When strictReferenceMode is active and reference images are provided, uses
-//      GPT-4o Vision to produce a structured design analysis of the reference, then
-//      builds a fidelity-reinforced prompt before calling DALL-E 3.
+//   3. When referenceFidelity is 'high' or 'exact' and reference images are provided,
+//      uses GPT-4o Vision to produce a structured design analysis of the reference,
+//      then builds a fidelity-reinforced prompt before calling DALL-E 3.
 //   4. Calls OpenAI DALL-E 3 to generate the image.
 //   5. Returns { imageUrl: "<url>", revisedPrompt: "<text>" } as JSON.
 //
@@ -41,6 +50,12 @@ const ALLOWED_SIZES = ['1024x1024', '1792x1024', '1024x1792'];
 
 // Allowed quality values for DALL-E 3.
 const ALLOWED_QUALITY = ['standard', 'hd'];
+
+// Allowed reference fidelity levels.
+// 'balanced' — standard generation (no strict prompt reinforcement)
+// 'high'     — reference is the design blueprint (fidelity-reinforced prompt)
+// 'exact'    — maximum preservation; creativity suppressed, extra constraints added
+const ALLOWED_FIDELITY = ['balanced', 'high', 'exact'];
 
 // Maximum characters accepted by the DALL-E 3 prompt field.
 const DALLE3_MAX_PROMPT_LENGTH = 4000;
@@ -175,9 +190,10 @@ async function analyzeReferenceImage(apiKey, referenceImages) {
  * @param {string} userPrompt       Original text from the user
  * @param {string} designAnalysis   Structured design description from GPT-4o
  * @param {boolean} hasMultipleRefs Whether secondary reference images were provided
+ * @param {string} [fidelityLevel]  'high' (default) or 'exact' for maximum preservation
  * @returns {string}
  */
-function buildStrictReferencePrompt(userPrompt, designAnalysis, hasMultipleRefs) {
+function buildStrictReferencePrompt(userPrompt, designAnalysis, hasMultipleRefs, fidelityLevel) {
   const blueprintSection = designAnalysis
     ? 'DESIGN BLUEPRINT (from uploaded reference image):\n' + designAnalysis
     : 'DESIGN BLUEPRINT: Follow the uploaded reference image exactly as the design source.';
@@ -186,8 +202,21 @@ function buildStrictReferencePrompt(userPrompt, designAnalysis, hasMultipleRefs)
     ? '\nSecondary reference image(s) may provide material, realism, or lighting guidance but must NOT override the primary blueprint design.'
     : '';
 
+  const isExact = fidelityLevel === 'exact';
+
+  const header = isExact
+    ? '[EXACT REFERENCE FIDELITY — MAXIMUM PRESERVATION — DO NOT DEVIATE]\n\n'
+    : '[STRICT REFERENCE FIDELITY — PRESERVE DESIGN EXACTLY]\n\n';
+
+  const extraExactConstraints = isExact
+    ? '- EXACT mode: minimize all creativity — only add realism, materials, shading, and depth.\n' +
+      '- EXACT mode: preserve every visual detail visible in the reference.\n' +
+      '- EXACT mode: treat even minor features as mandatory — do not simplify or omit them.\n' +
+      '- EXACT mode: do not add style interpretation; convert to the requested render level only.\n'
+    : '';
+
   return (
-    '[STRICT REFERENCE FIDELITY — PRESERVE DESIGN EXACTLY]\n\n' +
+    header +
     blueprintSection +
     secondaryNote +
     '\n\nSCENE / CONTEXT INSTRUCTION (from user):\n' + userPrompt +
@@ -204,7 +233,10 @@ function buildStrictReferencePrompt(userPrompt, designAnalysis, hasMultipleRefs)
     '- DO NOT redesign, reinvent, or creatively alter the uploaded design.\n' +
     '- DO NOT randomly shift colors, add extra features, or change the silhouette.\n' +
     '- DO NOT treat the reference as loose inspiration — reproduce it exactly.\n' +
-    '- Bias strongly toward fidelity over creativity.'
+    '- Bias strongly toward fidelity over creativity.\n' +
+    extraExactConstraints +
+    '\nNEGATIVE CONSTRAINTS: do not redesign; do not alter silhouette; do not change proportions; ' +
+    'do not add ornaments; do not change layout; do not invent extra features; do not replace the original design language.'
   );
 }
 
@@ -223,7 +255,8 @@ module.exports = async function handler(req, res) {
       size,
       quality,
       referenceImages,
-      strictReferenceMode
+      strictReferenceMode,
+      referenceFidelity
     } = req.body || {};
 
     // ── Input validation ────────────────────────────────────────────────────
@@ -280,15 +313,30 @@ module.exports = async function handler(req, res) {
     }
     const hasReferenceImages = refImageList.length > 0;
 
-    // Enable strict mode when explicitly requested OR when the prompt text
-    // contains language that strongly indicates fidelity preservation.
-    const isStrictMode =
-      hasReferenceImages &&
-      (strictReferenceMode === true || detectStrictFidelityMode(safePrompt));
+    // Resolve the effective fidelity level.
+    //   1. Use the explicit referenceFidelity parameter when it is a valid value.
+    //   2. Fall back to the legacy strictReferenceMode boolean or prompt auto-detection
+    //      and map those to 'high'.
+    //   3. When a reference image is present but no explicit fidelity was given and
+    //      strictReferenceMode was not explicitly set to false, default to 'high'.
+    //   4. Otherwise keep 'balanced' (standard generation).
+    let effectiveFidelity = 'balanced';
+    if (ALLOWED_FIDELITY.includes(referenceFidelity)) {
+      effectiveFidelity = referenceFidelity;
+    } else if (hasReferenceImages && (strictReferenceMode === true || detectStrictFidelityMode(safePrompt))) {
+      effectiveFidelity = 'high';
+    } else if (hasReferenceImages && strictReferenceMode !== false) {
+      // A reference image was uploaded but no explicit fidelity level or legacy flag
+      // was given — default to 'high' so the reference is used as the design blueprint.
+      // Callers that explicitly pass strictReferenceMode: false opt out of this default.
+      effectiveFidelity = 'high';
+    }
+
+    const isStrictMode = hasReferenceImages && effectiveFidelity !== 'balanced';
 
     if (isStrictMode) {
       console.log(
-        'api/generate-image: strict reference fidelity mode ACTIVE — ' +
+        'api/generate-image: strict reference fidelity mode ACTIVE (' + effectiveFidelity + ') — ' +
         refImageList.length + ' reference image(s), prompt snippet: "' +
         safePrompt.slice(0, 80) + '"'
       );
@@ -311,7 +359,8 @@ module.exports = async function handler(req, res) {
       finalPrompt = buildStrictReferencePrompt(
         safePrompt,
         designAnalysis,
-        refImageList.length > 1
+        refImageList.length > 1,
+        effectiveFidelity
       );
       // DALL-E 3 prompt character limit.
       finalPrompt = finalPrompt.slice(0, DALLE3_MAX_PROMPT_LENGTH);

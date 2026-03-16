@@ -41,13 +41,30 @@
   var pendingImageAttachments = [];
   var _attachmentIdCounter = 0;
 
+  // Reference fidelity level for image generation when reference images are attached.
+  // 'balanced' | 'high' | 'exact'
+  // Defaults to 'balanced'; automatically set to 'high' when the first image is attached.
+  var referenceFidelity = 'balanced';
+
   // Render the attachment tray with thumbnails and remove buttons.
+  // Also shows/hides the Reference Fidelity control based on whether
+  // images are pending, and syncs the active button state.
   function renderAttachmentTray() {
     var tray = document.getElementById('attachment-tray');
+    var fidelityRow = document.getElementById('reference-fidelity-row');
     if (!tray) return;
     if (pendingImageAttachments.length === 0) {
       tray.style.display = 'none';
       tray.innerHTML = '';
+      // Hide fidelity row and reset to balanced when all images are removed
+      if (fidelityRow) {
+        fidelityRow.style.display = 'none';
+        var resetBtns = fidelityRow.querySelectorAll('.fidelity-btn');
+        for (var j = 0; j < resetBtns.length; j++) {
+          resetBtns[j].classList.remove('active');
+        }
+      }
+      referenceFidelity = 'balanced';
       return;
     }
     tray.style.display = 'flex';
@@ -74,21 +91,40 @@
       item.appendChild(removeBtn);
       tray.appendChild(item);
     });
+    // Show fidelity row and sync active button state
+    if (fidelityRow) {
+      fidelityRow.style.display = 'flex';
+      var btns = fidelityRow.querySelectorAll('.fidelity-btn');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].getAttribute('data-fidelity') === referenceFidelity) {
+          btns[i].classList.add('active');
+        } else {
+          btns[i].classList.remove('active');
+        }
+      }
+    }
   }
 
   // Add an image to pending attachments.
   // dataUrl: full data URL (data:image/...;base64,...)
+  // When the first image is added the referenceFidelity is defaulted to 'high'
+  // so the reference is used as the design blueprint unless the user overrides it.
   function addImageAttachment(dataUrl, mimeType, name) {
     if (pendingImageAttachments.length >= 20) {
       alert('Maximum 20 images per message.');
       return;
     }
+    var isFirstImage = pendingImageAttachments.length === 0;
     pendingImageAttachments.push({
       id: ++_attachmentIdCounter,
       dataUrl: dataUrl,
       mimeType: mimeType || 'image/jpeg',
       name: name || 'image'
     });
+    // Default to 'high' fidelity when the first image is attached
+    if (isFirstImage && referenceFidelity === 'balanced') {
+      referenceFidelity = 'high';
+    }
     renderAttachmentTray();
     if (messageInput) messageInput.focus();
   }
@@ -949,12 +985,13 @@
           return { data: a.dataUrl, mimeType: a.mimeType };
         });
 
-        // Auto-detect strict fidelity language so the backend can reinforce
-        // prompt construction even if the UI flag was not explicitly set.
-        // Note: this mirrors STRICT_FIDELITY_PATTERNS in api/generate-image.js.
-        // Browser code cannot import server modules, so both copies must stay in sync.
-        var imgStrictMode = imgRefImages.length > 0 && (function (p) {
-          var patterns = [
+        // Determine the effective fidelity level to send to the backend.
+        // If reference images are present and the prompt contains strong fidelity
+        // language, upgrade to 'exact' automatically (mirrors STRICT_FIDELITY_PATTERNS
+        // in api/generate-image.js — both copies must stay in sync).
+        var imgEffectiveFidelity = referenceFidelity;
+        if (imgRefImages.length > 0 && imgEffectiveFidelity !== 'exact') {
+          var strictPatterns = [
             /\bexact(ly)?\b/i,
             /\bdo\s*not\s*change\b/i,
             /\bdon'?t\s*change\b/i,
@@ -971,8 +1008,10 @@
             /\bfidelity\b/i,
             /\baccurate(ly)?\b/i
           ];
-          return patterns.some(function (re) { return re.test(p); });
-        }(message));
+          if (strictPatterns.some(function (re) { return re.test(message); })) {
+            imgEffectiveFidelity = 'exact';
+          }
+        }
 
         var imgPayload = {
           prompt: message,
@@ -982,7 +1021,9 @@
         };
         if (imgRefImages.length > 0) {
           imgPayload.referenceImages = imgRefImages;
-          imgPayload.strictReferenceMode = imgStrictMode;
+          imgPayload.referenceFidelity = imgEffectiveFidelity;
+          // Keep legacy flag for backward compatibility with any cached server versions
+          imgPayload.strictReferenceMode = imgEffectiveFidelity !== 'balanced';
         }
 
         var imgResponse = await fetch('/api/generate-image', {
@@ -1455,6 +1496,22 @@
         reader.readAsDataURL(file);
       };
       input.click();
+    });
+  }
+
+  // Reference Fidelity buttons: update referenceFidelity state and sync active styling.
+  var fidelityRow = document.getElementById('reference-fidelity-row');
+  if (fidelityRow) {
+    fidelityRow.addEventListener('click', function (e) {
+      var btn = e.target.closest('.fidelity-btn');
+      if (!btn) return;
+      var level = btn.getAttribute('data-fidelity');
+      if (!level) return;
+      referenceFidelity = level;
+      var btns = fidelityRow.querySelectorAll('.fidelity-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('active', btns[i] === btn);
+      }
     });
   }
 
