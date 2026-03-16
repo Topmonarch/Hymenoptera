@@ -97,12 +97,12 @@
   var projects = {};
   var currentProject = 'Default';
 
-  // Subscription plan limits (messages per day)
+  // Subscription plan limits per action type (null = unlimited)
   var planLimits = {
-    starter: 30,
-    basic: 150,
-    premium: 500,
-    ultimate: Infinity
+    starter: { messages: 30,   images: 10,  videos: 10  },
+    basic:   { messages: 150,  images: 50,  videos: 20  },
+    premium: { messages: 500,  images: 75,  videos: 30  },
+    ultimate:{ messages: null, images: null, videos: null }
   };
 
   // Current user plan — defaults to 'starter' for all new users
@@ -122,6 +122,8 @@
 
   // Daily message usage tracking
   var messagesToday = Number(localStorage.getItem('messagesToday')) || 0;
+  var imagesToday   = Number(localStorage.getItem('imagesToday'))   || 0;
+  var videosToday   = Number(localStorage.getItem('videosToday'))   || 0;
   var lastResetDate = localStorage.getItem('lastResetDate') || getTodayDateString();
 
   // Daily reset check on page load: if the calendar day has changed, reset the counter
@@ -129,8 +131,12 @@
     var today = getTodayDateString();
     if (lastResetDate !== today) {
       messagesToday = 0;
+      imagesToday   = 0;
+      videosToday   = 0;
       lastResetDate = today;
       localStorage.setItem('messagesToday', '0');
+      localStorage.setItem('imagesToday',   '0');
+      localStorage.setItem('videosToday',   '0');
       localStorage.setItem('lastResetDate', today);
     }
   }());
@@ -216,19 +222,46 @@
   function updateMessageCounter() {
     var counter = document.getElementById('message-counter');
     if (!counter) return;
-    var limit = planLimits[userPlan];
-    var text = limit === Infinity
-      ? messagesToday + ' / \u221e'
-      : messagesToday + ' / ' + limit;
-    counter.textContent = 'Messages Today: ' + text;
-    var resetNote = counter.querySelector('.counter-reset-note');
-    if (!resetNote) {
-      resetNote = document.createElement('span');
-      resetNote.className = 'counter-reset-note';
-      resetNote.style.cssText = 'display:block;font-size:10px;color:#666;';
-      counter.appendChild(resetNote);
-    }
-    resetNote.textContent = 'Resets at 12:00 AM';
+    var limits = planLimits[userPlan] || planLimits.starter;
+    var msgLimit = limits.messages;
+    counter.textContent = msgLimit === null
+      ? 'Messages: Unlimited'
+      : 'Messages Today: ' + messagesToday + ' / ' + msgLimit;
+  }
+
+  function updateImageCounter() {
+    var counter = document.getElementById('image-counter');
+    if (!counter) return;
+    var limits = planLimits[userPlan] || planLimits.starter;
+    var imgLimit = limits.images;
+    counter.textContent = imgLimit === null
+      ? 'Images: Unlimited'
+      : 'Images Today: ' + imagesToday + ' / ' + imgLimit;
+  }
+
+  function updateVideoCounter() {
+    var counter = document.getElementById('video-counter');
+    if (!counter) return;
+    var limits = planLimits[userPlan] || planLimits.starter;
+    var vidLimit = limits.videos;
+    counter.textContent = vidLimit === null
+      ? 'Videos: Unlimited'
+      : 'Videos Today: ' + videosToday + ' / ' + vidLimit;
+  }
+
+  function updateResetLabel() {
+    var label = document.getElementById('reset-label');
+    if (!label) return;
+    var limits = planLimits[userPlan] || planLimits.starter;
+    var isUnlimited = limits.messages === null && limits.images === null && limits.videos === null;
+    label.textContent = isUnlimited ? 'Unlimited Access' : 'Resets at 12:00 AM';
+  }
+
+  function updateAllCounters() {
+    updateMessageCounter();
+    updateImageCounter();
+    updateVideoCounter();
+    updateResetLabel();
   }
 
   // Fetch the authoritative usage count from the backend and update the local
@@ -252,7 +285,17 @@
         if (data && typeof data.messages_used === 'number') {
           messagesToday = data.messages_used;
           localStorage.setItem('messagesToday', messagesToday);
-          updateMessageCounter();
+        }
+        if (data && typeof data.images_used === 'number') {
+          imagesToday = data.images_used;
+          localStorage.setItem('imagesToday', imagesToday);
+        }
+        if (data && typeof data.videos_used === 'number') {
+          videosToday = data.videos_used;
+          localStorage.setItem('videosToday', videosToday);
+        }
+        if (data && (typeof data.messages_used === 'number' || typeof data.images_used === 'number' || typeof data.videos_used === 'number')) {
+          updateAllCounters();
         }
       }).catch(function () {
         // Non-fatal: fall back to locally tracked counter
@@ -282,7 +325,7 @@
               console.log('fetchPlanFromServer: applying server plan', serverPlan, '(was', userPlan + ')');
               userPlan = serverPlan;
               localStorage.setItem('hymenoptera_plan', serverPlan);
-              updateMessageCounter();
+              updateAllCounters();
               updatePlanDisplay();
             }
             // Persist customerId for billing-portal access
@@ -778,17 +821,22 @@
     var today = getTodayDateString();
     if (today !== lastResetDate) {
       messagesToday = 0;
+      imagesToday   = 0;
+      videosToday   = 0;
       lastResetDate = today;
       localStorage.setItem('messagesToday', '0');
+      localStorage.setItem('imagesToday',   '0');
+      localStorage.setItem('videosToday',   '0');
       localStorage.setItem('lastResetDate', today);
-      updateMessageCounter();
+      updateAllCounters();
       // Refresh counter from backend asynchronously (non-blocking)
       fetchUsageFromBackend();
     }
 
     // Check plan limit before sending
-    var limit = planLimits[userPlan];
-    if (messagesToday >= limit) {
+    var limits = planLimits[userPlan] || planLimits.starter;
+    var limit = limits.messages;
+    if (limit !== null && messagesToday >= limit) {
       alert('Daily message limit reached. Upgrade your plan or wait until tomorrow.');
       return;
     }
@@ -997,6 +1045,10 @@
           assistantBubble = imgBubble;
           var imgPromptText = imgData.revisedPrompt || message;
           imgBubble.appendChild(makeCopyBtn(function () { return imgPromptText; }));
+          // Increment image counter on successful generation
+          imagesToday++;
+          localStorage.setItem('imagesToday', imagesToday);
+          updateImageCounter();
         }
         conversations[currentChatId].messages.push({ role: 'assistant', content: assistantText });
         saveMessageToHistory({ role: 'assistant', content: assistantText });
@@ -1656,7 +1708,7 @@
   showEmptyState();
 
   // Initialize the message counter display and refresh from backend
-  updateMessageCounter();
+  updateAllCounters();
   // Sync plan from server first, then refresh usage so counters use the
   // correct (server-authoritative) plan limits.
   fetchPlanFromServer(function () {
