@@ -663,11 +663,51 @@
     .message {
       margin: 10px 0;
       padding: 10px 14px;
+      padding-right: 44px;
       border-radius: 8px;
       max-width: 80%;
       line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
+      position: relative;
+    }
+
+    .msg-text {
+      display: block;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .msg-copy-btn {
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      background: transparent;
+      border: 1px solid rgba(45, 140, 255, 0.35);
+      border-radius: 4px;
+      color: #2D8CFF;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 3px 6px;
+      min-width: 28px;
+      min-height: 28px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      z-index: 1;
+      flex-shrink: 0;
+    }
+
+    .msg-copy-btn:hover {
+      background: rgba(45, 140, 255, 0.15);
+      border-color: rgba(45, 140, 255, 0.6);
+    }
+
+    .msg-copy-btn.copied {
+      color: #5cb85c;
+      border-color: rgba(92, 184, 92, 0.5);
     }
 
     .message.user {
@@ -684,6 +724,7 @@
     .message.assistant.typing-indicator {
       opacity: 0.75;
       font-style: italic;
+      padding-right: 14px;
     }
 
     .message.assistant.typing-indicator::after {

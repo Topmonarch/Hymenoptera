@@ -632,12 +632,76 @@
 
 
 
+  // Fallback copy for browsers without Clipboard API
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(ta);
+    try {
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+    } catch (e) {
+      /* ignore */
+    } finally {
+      document.body.removeChild(ta);
+    }
+  }
+
+  // Create a copy button; getTextFn() returns the text to copy when clicked
+  function makeCopyBtn(getTextFn) {
+    var btn = document.createElement('button');
+    btn.className = 'msg-copy-btn';
+    btn.title = 'Copy message';
+    btn.textContent = '📋';
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var text = getTextFn();
+      var doFeedback = function () {
+        btn.textContent = '✓';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = '📋';
+          btn.classList.remove('copied');
+        }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(doFeedback, function () {
+          fallbackCopy(text);
+          doFeedback();
+        });
+      } else {
+        fallbackCopy(text);
+        doFeedback();
+      }
+    });
+    return btn;
+  }
+
+  // Convert a plain streaming bubble (text-only innerText) into the
+  // text-span + copy-button structure once the content is finalised.
+  function convertToCopyableBubble(bubble) {
+    if (!bubble || bubble.querySelector('.msg-copy-btn')) return;
+    var text = bubble.innerText;
+    bubble.innerHTML = '';
+    var textSpan = document.createElement('span');
+    textSpan.className = 'msg-text';
+    textSpan.innerText = text;
+    bubble.appendChild(textSpan);
+    bubble.appendChild(makeCopyBtn(function () { return textSpan.innerText; }));
+  }
+
   function addMessage(type, text) {
     if (!messagesEl) return;
     hideEmptyState();
     var div = document.createElement('div');
     div.className = 'message ' + type;
-    div.innerText = text;
+    var textSpan = document.createElement('span');
+    textSpan.className = 'msg-text';
+    textSpan.innerText = text;
+    div.appendChild(textSpan);
+    div.appendChild(makeCopyBtn(function () { return textSpan.innerText; }));
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -649,7 +713,10 @@
   // Expose addMessage globally for any callers
   window.addMessage = addMessage;
 
-  // Create an empty streaming assistant bubble and return the element
+  // Create an empty streaming assistant bubble and return the element.
+  // The bubble starts as plain text (no copy button) so the streaming
+  // innerText updates work unobstructed; call convertToCopyableBubble()
+  // once streaming is complete to add the copy button.
   function createStreamingBubble() {
     if (!messagesEl) return null;
     hideEmptyState();
@@ -844,6 +911,7 @@
           if (typingIndicator) {
             typingIndicator.classList.remove('typing-indicator');
             typingIndicator.innerText = errMsg;
+            convertToCopyableBubble(typingIndicator);
           }
           assistantText = errMsg;
         } else {
@@ -888,6 +956,8 @@
           }
           assistantText = '[Image generated] ' + (imgData.revisedPrompt || message);
           assistantBubble = imgBubble;
+          var imgPromptText = imgData.revisedPrompt || message;
+          imgBubble.appendChild(makeCopyBtn(function () { return imgPromptText; }));
         }
         conversations[currentChatId].messages.push({ role: 'assistant', content: assistantText });
         saveMessageToHistory({ role: 'assistant', content: assistantText });
@@ -909,6 +979,7 @@
         if (typingIndicator) {
           typingIndicator.classList.remove('typing-indicator');
           typingIndicator.innerText = 'Error contacting AI server';
+          convertToCopyableBubble(typingIndicator);
         }
         setStatus('Ready');
         return;
@@ -988,6 +1059,7 @@
       }
 
       // Append assistant reply to conversation memory so future messages retain full context.
+      if (assistantBubble) convertToCopyableBubble(assistantBubble);
       conversations[currentChatId].messages.push({ role: 'assistant', content: assistantText });
       saveMessageToHistory({ role: 'assistant', content: assistantText });
       saveConversations();
@@ -999,6 +1071,7 @@
       if (errorBubble) {
         errorBubble.classList.remove('typing-indicator');
         errorBubble.innerText = 'Error contacting AI server';
+        convertToCopyableBubble(errorBubble);
       }
     }
 
