@@ -985,6 +985,19 @@
           return { data: a.dataUrl, mimeType: a.mimeType };
         });
 
+        // ── Generation routing ──────────────────────────────────────────────
+        // Select explicit route based on reference image presence and output type.
+        //   no reference image + image output => text_to_image_route
+        //   reference image(s) + image output => image_to_image_route
+        console.log('[Hymenoptera Routing] start');
+        console.log('[Hymenoptera Routing] hasReferenceImages=' + (imgRefImages.length > 0));
+        console.log('[Hymenoptera Routing] outputType=image');
+        console.log('[Hymenoptera Routing] referenceImageCount=' + imgRefImages.length);
+        console.log('[Hymenoptera Routing] promptLength=' + message.length);
+        var imgRoute = imgRefImages.length > 0 ? 'image_to_image_route' : 'text_to_image_route';
+        console.log('[Hymenoptera Routing] selected=' + imgRoute);
+        console.log('[Hymenoptera Route] ' + imgRoute);
+
         // Determine the effective fidelity level to send to the backend.
         // If reference images are present and the prompt contains strong fidelity
         // language, upgrade to 'exact' automatically (mirrors STRICT_FIDELITY_PATTERNS
@@ -1111,6 +1124,21 @@
         var vidRefImages = attachmentsCopy.map(function (a) {
           return { data: a.dataUrl, mimeType: a.mimeType };
         });
+
+        // ── Generation routing ──────────────────────────────────────────────
+        // Select explicit route based on reference image presence and output type.
+        //   reference image(s) + video output => image_to_video_route
+        //   no reference image + video output => text_only_video_route (prompt-only passthrough)
+        console.log('[Hymenoptera Routing] start');
+        console.log('[Hymenoptera Routing] hasReferenceImages=' + (vidRefImages.length > 0));
+        console.log('[Hymenoptera Routing] outputType=video');
+        console.log('[Hymenoptera Routing] referenceImageCount=' + vidRefImages.length);
+        console.log('[Hymenoptera Routing] promptLength=' + message.length);
+        // text_only_video_route: no dedicated text-only video path exists —
+        // prompt-only requests are passed through to /api/generate-video unchanged.
+        var vidRoute = vidRefImages.length > 0 ? 'image_to_video_route' : 'text_only_video_route';
+        console.log('[Hymenoptera Routing] selected=' + vidRoute);
+        console.log('[Hymenoptera Route] ' + vidRoute);
 
         // Determine the effective fidelity level for video.
         // Upgrade to 'exact' automatically when the prompt contains strong
