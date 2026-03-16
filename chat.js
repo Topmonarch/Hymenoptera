@@ -1017,7 +1017,8 @@
           prompt: message,
           plan: userPlan,
           userId: imgUserId,
-          sessionId: currentChatId
+          sessionId: currentChatId,
+          hasReferenceImage: imgRefImages.length > 0
         };
         if (imgRefImages.length > 0) {
           imgPayload.referenceImages = imgRefImages;
@@ -1090,6 +1091,123 @@
           imagesToday++;
           localStorage.setItem('imagesToday', imagesToday);
           updateImageCounter();
+        }
+        conversations[currentChatId].messages.push({ role: 'assistant', content: assistantText });
+        saveMessageToHistory({ role: 'assistant', content: assistantText });
+        saveConversations();
+        setStatus('Ready');
+        if (messageInput) messageInput.focus();
+        return;
+      }
+
+      // Video Generator mode: route to /api/generate-video instead of /api/chat.
+      // REFERENCE_LOCK_VIDEO_MODE is activated automatically when reference images
+      // are present, preserving the uploaded subject's identity and design.
+      if (convModel === 'video-generator') {
+        var vidHymenAuth = window.hymAuth && window.hymAuth.currentUser;
+        var vidUserId = vidHymenAuth ? vidHymenAuth.uid : 'guest';
+
+        // Build reference images list from any pending attachments.
+        var vidRefImages = attachmentsCopy.map(function (a) {
+          return { data: a.dataUrl, mimeType: a.mimeType };
+        });
+
+        // Determine the effective fidelity level for video.
+        // Upgrade to 'exact' automatically when the prompt contains strong
+        // fidelity language (mirrors the same logic in the image generator).
+        var vidEffectiveFidelity = referenceFidelity;
+        if (vidRefImages.length > 0 && vidEffectiveFidelity !== 'exact') {
+          var vidStrictPatterns = [
+            /\bexact(ly)?\b/i,
+            /\bdo\s*not\s*change\b/i,
+            /\bdon'?t\s*change\b/i,
+            /\bpreserve\s*this\b/i,
+            /\bsame\s*design\b/i,
+            /\bmake\s*this\s*realistic\b/i,
+            /\buse\s*this\s*exact\b/i,
+            /\bkeep\s*the\s*design\b/i,
+            /\bput\s*this\s*on\b/i,
+            /\bmake\s*this\s*real\b/i,
+            /\bturn\s*this\s+(?:drawing|sketch|design|image)\b/i,
+            /\bno\s*changes?\b/i,
+            /\bfaithful(ly)?\b/i,
+            /\bfidelity\b/i,
+            /\baccurate(ly)?\b/i,
+            /\banimate\s*this\b/i,
+            /\bbring\s*this\s*to\s*life\b/i
+          ];
+          if (vidStrictPatterns.some(function (re) { return re.test(message); })) {
+            vidEffectiveFidelity = 'exact';
+          }
+        }
+
+        var vidPayload = {
+          prompt: message,
+          plan: userPlan,
+          userId: vidUserId,
+          sessionId: currentChatId,
+          hasReferenceImage: vidRefImages.length > 0,
+          referenceLockVideoMode: vidRefImages.length > 0
+        };
+        if (vidRefImages.length > 0) {
+          vidPayload.referenceImages = vidRefImages;
+          vidPayload.referenceFidelity = vidEffectiveFidelity;
+        }
+
+        var vidResponse = await fetch('/api/generate-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(vidPayload)
+        });
+        clearInterval(dotInterval);
+        if (!vidResponse.ok) {
+          var vidErr = null;
+          try { vidErr = await vidResponse.json(); } catch (e) { /* ignore */ }
+          var vidErrMsg = (vidErr && vidErr.error && vidErr.error.message) || 'Video generation failed';
+          if (typingIndicator) {
+            typingIndicator.classList.remove('typing-indicator');
+            typingIndicator.innerText = vidErrMsg;
+            convertToCopyableBubble(typingIndicator);
+          }
+          assistantText = vidErrMsg;
+        } else {
+          var vidData = await vidResponse.json();
+          if (typingIndicator) typingIndicator.remove();
+          // Build a video concept bubble with a lock indicator when reference lock was active
+          var vidBubble = document.createElement('div');
+          vidBubble.className = 'message assistant';
+          if (vidData.referenceLocked) {
+            var lockBadge = document.createElement('div');
+            lockBadge.style.cssText = 'font-size:11px;color:#2D8CFF;margin-bottom:6px;display:flex;align-items:center;gap:4px;';
+            lockBadge.textContent = '\uD83D\uDD12 Reference Lock Active — subject identity and design preserved';
+            vidBubble.appendChild(lockBadge);
+          }
+          var conceptEl = document.createElement('div');
+          conceptEl.style.cssText = 'white-space:pre-wrap;line-height:1.6;';
+          conceptEl.textContent = vidData.concept || '';
+          vidBubble.appendChild(conceptEl);
+          var vidBtnRow = document.createElement('div');
+          vidBtnRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;';
+          var vidRegenBtn = document.createElement('button');
+          vidRegenBtn.textContent = '\uD83D\uDD04 Regenerate';
+          vidRegenBtn.style.cssText = 'font-size:12px;color:#2D8CFF;cursor:pointer;background:none;border:1px solid #2D8CFF;border-radius:4px;padding:4px 10px;';
+          vidRegenBtn.addEventListener('click', function () {
+            if (messageInput) messageInput.value = message;
+            sendMessage();
+          });
+          vidBtnRow.appendChild(vidRegenBtn);
+          vidBubble.appendChild(vidBtnRow);
+          if (messagesEl) {
+            messagesEl.appendChild(vidBubble);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+          }
+          assistantText = vidData.concept || '';
+          assistantBubble = vidBubble;
+          vidBubble.appendChild(makeCopyBtn(function () { return assistantText; }));
+          // Increment video counter on successful generation
+          videosToday++;
+          localStorage.setItem('videosToday', videosToday);
+          updateVideoCounter();
         }
         conversations[currentChatId].messages.push({ role: 'assistant', content: assistantText });
         saveMessageToHistory({ role: 'assistant', content: assistantText });
