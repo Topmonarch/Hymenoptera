@@ -248,6 +248,107 @@ function buildReferenceLockVideoPrompt(userPrompt, designAnalysis, hasMultipleRe
 }
 
 /**
+ * Uses GPT-4o to evaluate whether the generated video concept faithfully
+ * preserves the uploaded reference image's subject identity and design.
+ *
+ * Scores are 1–10 per dimension.  The result is considered passing when the
+ * overall score is >= 7.  On any error the function returns a passing result
+ * so that a validation failure never blocks the response.
+ *
+ * @param {string} apiKey                OpenAI API key
+ * @param {{ data: string, mimeType: string }[]} referenceImages
+ * @param {string} concept               Generated video concept / storyboard text
+ * @param {string} userPrompt            The user's original text prompt
+ * @returns {Promise<{ pass: boolean, score: number, issues: string }>}
+ */
+async function validateConceptFidelity(apiKey, referenceImages, concept, userPrompt) {
+  if (!referenceImages || referenceImages.length === 0 || !concept) {
+    return { pass: true, score: 10, issues: '' };
+  }
+
+  // Include only the primary reference image for the evaluation.
+  const refParts = referenceImages.slice(0, 1).map(function (img) {
+    const mimeType = (img.mimeType || 'image/jpeg').split(';')[0].trim();
+    const url = img.data.startsWith('data:') ? img.data : ('data:' + mimeType + ';base64,' + img.data);
+    return { type: 'image_url', image_url: { url: url, detail: 'high' } };
+  }).filter(function (part) {
+    return DATA_URL_PATTERN.test(part.image_url.url) || /^data:image\//.test(part.image_url.url);
+  });
+
+  if (refParts.length === 0) return { pass: true, score: 10, issues: '' };
+
+  const validationMessages = [
+    {
+      role: 'system',
+      content:
+        'You are a strict video concept fidelity validator. Your job is to compare a generated video ' +
+        'concept/storyboard description against a reference image and score how faithfully the concept ' +
+        'preserves the uploaded subject\'s identity, design, and appearance. ' +
+        'Be strict: passing means the concept clearly animates the original subject; ' +
+        'failing means the concept describes a different or generic subject.'
+    },
+    {
+      role: 'user',
+      content: [
+        { type: 'text', text: 'REFERENCE IMAGE (the subject that must be animated faithfully):' },
+        ...refParts,
+        {
+          type: 'text',
+          text:
+            'GENERATED VIDEO CONCEPT:\n' + concept + '\n\n' +
+            'The user instruction was: "' + userPrompt + '"\n\n' +
+            'Score the concept against the reference on each dimension (1 = completely ignores reference, 10 = faithfully preserves reference):\n' +
+            '1. Subject identity — does the concept describe the same subject as the reference?\n' +
+            '2. Design preservation — are the reference\'s design elements, colors, and markings described?\n' +
+            '3. Silhouette and structure — is the reference\'s shape and construction maintained?\n' +
+            '4. No unauthorized substitution — is the original subject animated rather than replaced?\n' +
+            '5. Feature accuracy — are the distinctive features and details present throughout?\n\n' +
+            'Respond ONLY in this exact JSON format (no markdown, no extra text):\n' +
+            '{"identity":N,"design":N,"structure":N,"noSubstitution":N,"features":N,"overall":N,"pass":true_or_false,"issues":"brief description of main deviations or empty string"}\n' +
+            'Set pass to true when overall >= 7, false otherwise.'
+        }
+      ]
+    }
+  ];
+
+  try {
+    const valRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: validationMessages,
+        max_tokens: 200,
+        temperature: 0.1
+      })
+    });
+    if (!valRes.ok) return { pass: true, score: 10, issues: '' };
+    const valData = await valRes.json();
+    const content =
+      valData.choices &&
+      valData.choices[0] &&
+      valData.choices[0].message &&
+      valData.choices[0].message.content;
+    if (!content) return { pass: true, score: 10, issues: '' };
+    // Strip any accidental markdown fences before parsing.
+    const jsonText = content.trim().replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
+    const parsed = JSON.parse(jsonText);
+    return {
+      pass: parsed.pass === true,
+      score: typeof parsed.overall === 'number' ? parsed.overall : 10,
+      issues: typeof parsed.issues === 'string' ? parsed.issues : ''
+    };
+  } catch (e) {
+    console.warn('api/generate-video: concept fidelity validation failed:', e.message);
+    // Validation errors are non-fatal — pass through to avoid blocking the response.
+    return { pass: true, score: 10, issues: '' };
+  }
+}
+
+/**
  * Calls GPT-4o to generate a detailed video concept / storyboard description.
  * When reference lock is active the prompt is pre-loaded with the design blueprint
  * and strict preservation rules.
@@ -413,14 +514,16 @@ module.exports = async function handler(req, res) {
     // When reference lock mode is active, analyse the reference image with
     // GPT-4o Vision to derive a structured design description, then build a
     // reference-locked prompt for the video concept generator.
+    // Store the design analysis so it can be reused if a regeneration is needed.
     // Note: no secondary truncation is applied to the assembled locked prompt
     // because GPT-4o (unlike DALL-E 3) supports large context inputs.
     let finalPrompt = safePrompt;
+    let cachedDesignAnalysis = '';
     if (isLockMode && refImageList.length > 0) {
-      const designAnalysis = await analyzeReferenceImage(apiKey, refImageList);
+      cachedDesignAnalysis = await analyzeReferenceImage(apiKey, refImageList);
       finalPrompt = buildReferenceLockVideoPrompt(
         safePrompt,
-        designAnalysis,
+        cachedDesignAnalysis,
         refImageList.length > 1,
         effectiveFidelity
       );
@@ -434,9 +537,44 @@ module.exports = async function handler(req, res) {
       return res.status(502).json({ error: { message: 'No video concept returned from generation service' } });
     }
 
+    // ── Concept fidelity validation and auto-regeneration ───────────────────
+    // When reference lock is active and reference images are present, validate
+    // whether the generated concept adequately preserves the uploaded subject's
+    // identity and design.  If the fidelity score is too low, regenerate once
+    // with escalated 'exact' settings.
+    let finalConcept = concept;
+
+    if (isLockMode && refImageList.length > 0) {
+      const validation = await validateConceptFidelity(apiKey, refImageList, concept, safePrompt);
+      if (!validation.pass) {
+        console.log(
+          'api/generate-video: concept fidelity validation FAILED (score=' + validation.score +
+          ', issues="' + validation.issues + '") — regenerating with exact mode'
+        );
+        // Escalate to 'exact' fidelity.  Reuse the cached design analysis to
+        // avoid a second GPT-4o Vision call.
+        const escalatedPrompt = buildReferenceLockVideoPrompt(
+          safePrompt,
+          cachedDesignAnalysis,
+          refImageList.length > 1,
+          'exact'
+        );
+        try {
+          const regenConcept = await generateVideoConcept(apiKey, escalatedPrompt, true);
+          if (regenConcept) {
+            finalConcept = regenConcept;
+            console.log('api/generate-video: concept regeneration complete with exact fidelity mode');
+          }
+        } catch (regenErr) {
+          // Regeneration failure is non-fatal — return the original concept.
+          console.warn('api/generate-video: concept regeneration attempt failed:', regenErr.message);
+        }
+      }
+    }
+
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({
-      concept: concept,
+      concept: finalConcept,
       prompt: safePrompt,
       referenceLocked: isLockMode
     });
