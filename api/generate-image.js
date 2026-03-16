@@ -256,7 +256,8 @@ module.exports = async function handler(req, res) {
       quality,
       referenceImages,
       strictReferenceMode,
-      referenceFidelity
+      referenceFidelity,
+      hasReferenceImage
     } = req.body || {};
 
     // ── Input validation ────────────────────────────────────────────────────
@@ -311,7 +312,8 @@ module.exports = async function handler(req, res) {
         }
       });
     }
-    const hasReferenceImages = refImageList.length > 0;
+    // hasReferenceImage can be set explicitly by the caller or derived from the list.
+    const hasReferenceImages = refImageList.length > 0 || hasReferenceImage === true;
 
     // Resolve the effective fidelity level.
     //   1. Use the explicit referenceFidelity parameter when it is a valid value.
