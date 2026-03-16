@@ -828,6 +828,48 @@
       background: #b71c1c;
     }
 
+    /* Reference Fidelity row — shown below the attachment tray when images are pending */
+    #reference-fidelity-row {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 2px 2px;
+      flex-wrap: wrap;
+    }
+
+    .fidelity-label {
+      font-size: 11px;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    .fidelity-options {
+      display: flex;
+      gap: 4px;
+    }
+
+    .fidelity-btn {
+      font-size: 11px;
+      padding: 2px 10px;
+      border-radius: 4px;
+      border: 1px solid #2a3040;
+      background: transparent;
+      color: #888;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .fidelity-btn:hover {
+      border-color: #2D8CFF;
+      color: #2D8CFF;
+    }
+
+    .fidelity-btn.active {
+      background: #2D8CFF;
+      border-color: #2D8CFF;
+      color: #fff;
+    }
+
     #message-input {
       flex: 1;
       min-width: 0;
@@ -1197,6 +1239,15 @@
       <div id="input-area">
         <!-- Attachment preview tray: shown above input row when images are pending -->
         <div id="attachment-tray"></div>
+        <!-- Reference Fidelity control: shown when images are pending in the tray -->
+        <div id="reference-fidelity-row">
+          <span class="fidelity-label">Reference Fidelity:</span>
+          <div class="fidelity-options">
+            <button class="fidelity-btn" data-fidelity="balanced" title="Standard generation with reference as inspiration">Balanced</button>
+            <button class="fidelity-btn" data-fidelity="high" title="Follow the reference design closely">High</button>
+            <button class="fidelity-btn" data-fidelity="exact" title="Preserve every detail of the reference — only add realism">Exact</button>
+          </div>
+        </div>
         <div id="input-row">
           <input id="message-input" placeholder="Ask something..."
             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}" />
