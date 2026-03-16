@@ -452,17 +452,54 @@ function checkVerificationState() {
 
 // ===== INIT =====
 
+// Fetch the server-side plan for the given user email and update localStorage
+// and the billing panel if the plan has changed.
+function refreshPlanFromServer(email) {
+  if (!email || email === 'guest') return;
+  fetch('/api/plan?email=' + encodeURIComponent(email))
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) {
+      if (!data || !data.plan) return;
+      var serverPlan = data.plan;
+      var localPlan  = localStorage.getItem('hymenoptera_plan') || 'starter';
+      if (serverPlan !== localPlan) {
+        console.log('settings: applying server plan', serverPlan, '(was', localPlan + ')');
+        localStorage.setItem('hymenoptera_plan', serverPlan);
+      }
+      // Persist customerId for billing-portal access
+      if (data.customerId) {
+        localStorage.setItem('hymenoptera_stripe_customer_' + email, data.customerId);
+      }
+      // Refresh the billing panel to show the latest plan
+      loadBillingData();
+    })
+    .catch(function () {
+      // Non-fatal: keep existing local plan
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   checkVerificationToken();
   checkVerificationState();
 
   var params = new URLSearchParams(window.location.search);
-  if (params.get('portal') === 'return') {
+  var isUpgradeSuccess = params.get('upgrade_success') === '1';
+  var isPortalReturn   = params.get('portal') === 'return';
+
+  if (isPortalReturn || isUpgradeSuccess) {
     history.replaceState(null, '', window.location.pathname);
     var user = localStorage.getItem('hymenoptera_user');
     if (user) {
       openSettings();
       switchSettingsTab('billing');
+      // Fetch and apply the latest plan from the server
+      refreshPlanFromServer(user);
     }
+  }
+
+  // On every load, sync the plan from the server so it persists after re-login
+  var currentUser = localStorage.getItem('hymenoptera_user');
+  if (currentUser && currentUser !== 'guest') {
+    refreshPlanFromServer(currentUser);
   }
 });

@@ -100,7 +100,7 @@
   // Subscription plan limits (messages per day)
   var planLimits = {
     starter: 30,
-    basic: 100,
+    basic: 150,
     premium: 500,
     ultimate: Infinity
   };
@@ -259,6 +259,45 @@
       });
     } catch (e) {
       // Non-fatal: ignore errors in the refresh path
+    }
+  }
+
+  // Fetch the authoritative plan from the server and apply it if it differs
+  // from the locally cached value.  Called on page load and after returning
+  // from a Stripe payment or billing-portal session so the UI always reflects
+  // the server-side source of truth without requiring a sign-out/sign-in cycle.
+  function fetchPlanFromServer(onComplete) {
+    try {
+      var user = localStorage.getItem('hymenoptera_user');
+      if (!user || user === 'guest') {
+        if (typeof onComplete === 'function') onComplete();
+        return;
+      }
+      fetch('/api/plan?email=' + encodeURIComponent(user))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (data && data.plan) {
+            var serverPlan = data.plan;
+            if (serverPlan !== userPlan) {
+              console.log('fetchPlanFromServer: applying server plan', serverPlan, '(was', userPlan + ')');
+              userPlan = serverPlan;
+              localStorage.setItem('hymenoptera_plan', serverPlan);
+              updateMessageCounter();
+              updatePlanDisplay();
+            }
+            // Persist customerId for billing-portal access
+            if (data.customerId) {
+              localStorage.setItem('hymenoptera_stripe_customer_' + user, data.customerId);
+            }
+          }
+          if (typeof onComplete === 'function') onComplete();
+        })
+        .catch(function () {
+          // Non-fatal: keep existing local plan
+          if (typeof onComplete === 'function') onComplete();
+        });
+    } catch (e) {
+      if (typeof onComplete === 'function') onComplete();
     }
   }
 
@@ -1618,7 +1657,51 @@
 
   // Initialize the message counter display and refresh from backend
   updateMessageCounter();
-  fetchUsageFromBackend();
+  // Sync plan from server first, then refresh usage so counters use the
+  // correct (server-authoritative) plan limits.
+  fetchPlanFromServer(function () {
+    fetchUsageFromBackend();
+  });
+
+  // Check if the user is returning from a Stripe payment or billing portal.
+  // ?upgrade_success=1  — returned from a successful payment link checkout
+  // ?portal=return      — returned from the Stripe billing portal
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var isUpgradeSuccess = params.get('upgrade_success') === '1';
+    var isPortalReturn   = params.get('portal') === 'return';
+
+    if (isUpgradeSuccess || isPortalReturn) {
+      // Clean the URL immediately so a refresh doesn't re-trigger this
+      history.replaceState(null, '', window.location.pathname);
+      if (isUpgradeSuccess) {
+        // Show a temporary processing indicator while the webhook may still be arriving
+        var planDisplayEl = document.getElementById('plan-display');
+        if (planDisplayEl) planDisplayEl.textContent = 'Plan: Processing upgrade…';
+      }
+      // Poll up to 5 times (every 2 s) until the server returns the upgraded plan
+      var pollCount = 0;
+      var MAX_PLAN_POLL_ATTEMPTS = 5;
+      var POLL_INTERVAL_MS       = 2000;
+      var INITIAL_POLL_DELAY_MS  = 1500;
+      var prevPlan  = userPlan;
+      function pollPlan() {
+        fetchPlanFromServer(function () {
+          pollCount++;
+          if (userPlan !== prevPlan) {
+            // Plan changed — stop polling
+            fetchUsageFromBackend();
+          } else if (pollCount < MAX_PLAN_POLL_ATTEMPTS) {
+            setTimeout(pollPlan, POLL_INTERVAL_MS);
+          } else {
+            // Polling exhausted — still refresh usage with current plan
+            fetchUsageFromBackend();
+          }
+        });
+      }
+      setTimeout(pollPlan, INITIAL_POLL_DELAY_MS);
+    }
+  })();
 
   // Plan display
   function updatePlanDisplay() {
