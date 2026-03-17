@@ -46,6 +46,34 @@
   // Defaults to 'balanced'; automatically set to 'high' when the first image is attached.
   var referenceFidelity = 'balanced';
 
+  // Keywords that trigger VIDEO_GENERATION_ROUTE regardless of the active model.
+  // When any of these words appear in the prompt, the request is routed to
+  // /api/video-route instead of the image generation pipeline.
+  var VIDEO_KEYWORDS = ['video', 'animate', 'animation', 'clip', 'motion', 'cinematic', 'make this move'];
+
+  /**
+   * Returns true when the prompt text contains at least one video keyword.
+   * Case-insensitive whole-word match (except the multi-word phrase).
+   *
+   * @param {string} text
+   * @returns {boolean}
+   */
+  function promptContainsVideoKeywords(text) {
+    if (!text || typeof text !== 'string') return false;
+    var lower = text.toLowerCase();
+    for (var k = 0; k < VIDEO_KEYWORDS.length; k++) {
+      var kw = VIDEO_KEYWORDS[k];
+      if (kw === 'make this move') {
+        if (lower.indexOf('make this move') !== -1) return true;
+      } else {
+        // whole-word check
+        var re = new RegExp('\\b' + kw.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&') + '\\b', 'i');
+        if (re.test(text)) return true;
+      }
+    }
+    return false;
+  }
+
   // Render the attachment tray with thumbnails and remove buttons.
   // Also shows/hides the Reference Fidelity control based on whether
   // images are pending, and syncs the active button state.
@@ -973,6 +1001,126 @@
       messagesToday++;
       localStorage.setItem('messagesToday', messagesToday);
       updateMessageCounter();
+
+      // ── VIDEO_GENERATION_ROUTE — keyword-based auto-routing ──────────────────
+      // If the prompt contains video keywords (video, animate, animation, clip,
+      // motion, cinematic, make this move), route to /api/video-route regardless
+      // of the active model, UNLESS the model is already 'video-generator'
+      // (that mode uses its own dedicated pipeline below).
+      // This check runs before the image-generator mode so keyword matches in
+      // image mode are automatically redirected to video generation.
+      if (convModel !== 'video-generator' && promptContainsVideoKeywords(message)) {
+        var vrHymenAuth = window.hymAuth && window.hymAuth.currentUser;
+        var vrUserId = vrHymenAuth ? vrHymenAuth.uid : 'guest';
+
+        // Build reference images from any pending attachments.
+        var vrRefImages = attachmentsCopy.map(function (a) {
+          return { data: a.dataUrl, mimeType: a.mimeType };
+        });
+
+        console.log('[Hymenoptera Routing] start');
+        console.log('[Hymenoptera Routing] hasReferenceImages=' + (vrRefImages.length > 0));
+        console.log('[Hymenoptera Routing] outputType=video');
+        console.log('[Hymenoptera Routing] referenceImageCount=' + vrRefImages.length);
+        console.log('[Hymenoptera Routing] promptLength=' + message.length);
+        console.log('[Hymenoptera Routing] selected_route=VIDEO_GENERATION_ROUTE');
+
+        var vrPayload = {
+          prompt: message,
+          plan: userPlan,
+          userId: vrUserId,
+          sessionId: currentChatId,
+          hasReferenceImage: vrRefImages.length > 0
+        };
+        if (vrRefImages.length > 0) {
+          vrPayload.referenceImages = vrRefImages;
+          vrPayload.referenceFidelity = referenceFidelity;
+        }
+
+        var vrResponse = await fetch('/api/video-route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(vrPayload)
+        });
+        clearInterval(dotInterval);
+
+        if (!vrResponse.ok) {
+          var vrErr = null;
+          try { vrErr = await vrResponse.json(); } catch (e) { /* ignore */ }
+          var vrErrMsg = (vrErr && vrErr.error && vrErr.error.message) || 'Video generation failed';
+          if (typingIndicator) {
+            typingIndicator.classList.remove('typing-indicator');
+            typingIndicator.innerText = vrErrMsg;
+            convertToCopyableBubble(typingIndicator);
+          }
+          assistantText = vrErrMsg;
+        } else {
+          var vrData = await vrResponse.json();
+          if (typingIndicator) typingIndicator.remove();
+
+          if (vrData.type === 'video' && vrData.url) {
+            // Build a video player bubble with download and regenerate controls
+            var vrBubble = document.createElement('div');
+            vrBubble.className = 'message assistant';
+
+            var videoEl = document.createElement('video');
+            videoEl.src = vrData.url;
+            videoEl.controls = true;
+            videoEl.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin-bottom:8px;';
+            videoEl.setAttribute('playsinline', '');
+            vrBubble.appendChild(videoEl);
+
+            var vrBtnRow = document.createElement('div');
+            vrBtnRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+
+            var vrDlBtn = document.createElement('a');
+            vrDlBtn.href = vrData.url;
+            vrDlBtn.download = 'hymenoptera-video-' + Date.now() + '.mp4';
+            vrDlBtn.target = '_blank';
+            vrDlBtn.rel = 'noopener noreferrer';
+            vrDlBtn.textContent = '\u2B07 Download Video';
+            vrDlBtn.style.cssText = 'font-size:12px;color:#2D8CFF;cursor:pointer;text-decoration:none;padding:4px 10px;border:1px solid #2D8CFF;border-radius:4px;';
+            vrBtnRow.appendChild(vrDlBtn);
+
+            var vrRegenBtn = document.createElement('button');
+            vrRegenBtn.textContent = '\uD83D\uDD04 Regenerate';
+            vrRegenBtn.style.cssText = 'font-size:12px;color:#2D8CFF;cursor:pointer;background:none;border:1px solid #2D8CFF;border-radius:4px;padding:4px 10px;';
+            vrRegenBtn.addEventListener('click', function () {
+              if (messageInput) messageInput.value = message;
+              sendMessage();
+            });
+            vrBtnRow.appendChild(vrRegenBtn);
+            vrBubble.appendChild(vrBtnRow);
+
+            if (messagesEl) {
+              messagesEl.appendChild(vrBubble);
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+            assistantText = '[Video generated] ' + message;
+            assistantBubble = vrBubble;
+            vrBubble.appendChild(makeCopyBtn(function () { return vrData.url; }));
+            // Increment video counter on successful generation
+            videosToday++;
+            localStorage.setItem('videosToday', videosToday);
+            updateVideoCounter();
+          } else {
+            // Unexpected response format — display as text
+            var vrFallbackText = JSON.stringify(vrData);
+            if (typingIndicator) {
+              typingIndicator.classList.remove('typing-indicator');
+              typingIndicator.innerText = vrFallbackText;
+              convertToCopyableBubble(typingIndicator);
+            }
+            assistantText = vrFallbackText;
+          }
+        }
+        conversations[currentChatId].messages.push({ role: 'assistant', content: assistantText });
+        saveMessageToHistory({ role: 'assistant', content: assistantText });
+        saveConversations();
+        setStatus('Ready');
+        if (messageInput) messageInput.focus();
+        return;
+      }
 
       // Image Generator mode: route to /api/generate-image instead of /api/chat
       if (convModel === 'image-generator') {
