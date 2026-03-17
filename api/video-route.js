@@ -293,6 +293,7 @@ module.exports = async function handler(req, res) {
 
     // ── Logging: route selection ──────────────────────────────────────────────
 
+    console.log('[DEBUG] Prompt:', safePrompt);
     const provider = (process.env.VIDEO_PROVIDER || DEFAULT_PROVIDER).toLowerCase();
     console.log('[Hymenoptera Routing] selected_route=VIDEO_GENERATION_ROUTE');
     console.log('[Hymenoptera Video] model=' + provider);
@@ -323,21 +324,20 @@ module.exports = async function handler(req, res) {
     // ── API key check ─────────────────────────────────────────────────────────
 
     const videoApiKey = process.env.VIDEO_API_KEY;
-    if (!videoApiKey) {
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(503).json({
-        error: {
-          message:
-            'Video generation provider not configured. ' +
-            'Set VIDEO_API_KEY (and optionally VIDEO_PROVIDER and VIDEO_API_URL) in environment variables.'
-        }
-      });
-    }
 
     // ── Generate video ────────────────────────────────────────────────────────
 
-    const apiUrl = process.env.VIDEO_API_URL || '';
-    const videoUrl = await generateVideo(provider, videoApiKey, safePrompt, refImageList, apiUrl);
+    let videoUrl;
+    if (!videoApiKey) {
+      // No provider configured — return a placeholder video so the frontend
+      // video player works immediately.  Replace this fallback with a real
+      // provider once VIDEO_API_KEY is set.
+      console.log('[VIDEO] No VIDEO_API_KEY configured — using placeholder fallback');
+      videoUrl = 'https://www.w3schools.com/html/mov_bbb.mp4';
+    } else {
+      const apiUrl = process.env.VIDEO_API_URL || '';
+      videoUrl = await generateVideo(provider, videoApiKey, safePrompt, refImageList, apiUrl);
+    }
 
     // ── Logging: completion ───────────────────────────────────────────────────
 
