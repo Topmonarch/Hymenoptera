@@ -23,12 +23,23 @@
 //                        'exact'   — maximum reference preservation; creativity is
 //                          further suppressed and additional constraints are injected.
 //
+// The endpoint uses two internal routes:
+//   text_to_image_route    — called when no reference image is provided; generates from
+//                            the text prompt alone using DALL-E 3.
+//   image_to_image_route   — called when at least one reference image is uploaded; the
+//                            reference is treated as the EXACT design blueprint.  A
+//                            system prompt overrides the raw user prompt, negative
+//                            constraints are appended, and the fidelity-reinforced
+//                            prompt is built from a GPT-4o Vision design analysis.
+//                            Low-drift config (strength=0.9, creativity=low) is logged.
+//                            If the initial result fails fidelity validation it is
+//                            automatically regenerated in 'exact' mode.
+//
 // The endpoint:
 //   1. Validates the request fields.
 //   2. Checks the daily image generation quota via usageLimits.
-//   3. When referenceFidelity is 'high' or 'exact' and reference images are provided,
-//      uses GPT-4o Vision to produce a structured design analysis of the reference,
-//      then builds a fidelity-reinforced prompt before calling DALL-E 3.
+//   3. Detects whether a reference image is present (hasReferenceImage) and routes
+//      to the appropriate generation path.
 //   4. Calls OpenAI DALL-E 3 to generate the image.
 //   5. Returns { imageUrl: "<url>", revisedPrompt: "<text>" } as JSON.
 //
@@ -341,6 +352,209 @@ function buildStrictReferencePrompt(userPrompt, designAnalysis, hasMultipleRefs,
   );
 }
 
+/**
+ * text_to_image_route — generates an image from a text prompt only.
+ * Called when no reference image is provided.
+ *
+ * @param {{ apiKey: string, safePrompt: string, resolvedSize: string, resolvedQuality: string }} params
+ * @returns {Promise<{ imageUrl: string, revisedPrompt: string }>}
+ */
+async function generateImageFromText(params) {
+  const { apiKey, safePrompt, resolvedSize, resolvedQuality } = params;
+  const openaiRes = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + apiKey
+    },
+    body: JSON.stringify({
+      model: 'dall-e-3',
+      prompt: safePrompt,
+      n: 1,
+      size: resolvedSize,
+      quality: resolvedQuality,
+      response_format: 'url'
+    })
+  });
+
+  if (!openaiRes.ok) {
+    let errData;
+    try { errData = await openaiRes.json(); } catch (e) { errData = null; }
+    const err = new Error('Image generation service error');
+    err.statusCode = 502;
+    err.errorBody = (errData && errData.error) || { message: err.message };
+    throw err;
+  }
+
+  const openaiData = await openaiRes.json();
+  const imageData = openaiData.data && openaiData.data[0];
+  if (!imageData || !imageData.url) {
+    const err = new Error('No image returned from generation service');
+    err.statusCode = 502;
+    err.errorBody = { message: err.message };
+    throw err;
+  }
+
+  return { imageUrl: imageData.url, revisedPrompt: imageData.revised_prompt || safePrompt };
+}
+
+/**
+ * image_to_image_route — generates an image using an uploaded reference image as
+ * the strict design blueprint.  Applies a fidelity-reinforced system prompt,
+ * negative constraints, and low-drift configuration to minimise design deviation.
+ * Called when at least one reference image is provided.
+ *
+ * @param {{ apiKey: string, safePrompt: string, refImageList: Array, effectiveFidelity: string, resolvedSize: string, resolvedQuality: string }} params
+ * @returns {Promise<{ imageUrl: string, revisedPrompt: string }>}
+ */
+async function generateImageWithReference(params) {
+  const { apiKey, safePrompt, refImageList, effectiveFidelity, resolvedSize, resolvedQuality } = params;
+
+  // ── Step 4: System prompt override ─────────────────────────────────────
+  // The system prompt instructs the model to treat the reference image as the
+  // authoritative design blueprint and suppresses creative deviations.
+  const systemPrompt = `Use the uploaded reference image as the EXACT design blueprint.
+
+Preserve:
+- silhouette
+- proportions
+- structure
+- all defining features
+
+Do NOT:
+- redesign
+- add new details
+- change shape
+- alter proportions
+- replace design
+
+Only apply:
+- realism
+- materials
+- lighting
+- shading`;
+
+  // ── Step 5: Negative constraints ────────────────────────────────────────
+  const negativePrompt = `do not redesign,
+do not change proportions,
+do not alter silhouette,
+do not add ornaments,
+do not invent features,
+do not replace design`;
+
+  // ── Step 6: Low-drift configuration ────────────────────────────────────
+  const config = {
+    mode: 'image_to_image',
+    strength: 0.9,
+    creativity: 'low',
+    variation: 'low'
+  };
+
+  // ── Analyse the reference image and build the fidelity-reinforced prompt ─
+  // The design analysis is cached so it can be reused during auto-regeneration.
+  const cachedDesignAnalysis = await analyzeReferenceImage(apiKey, refImageList);
+
+  // Compose the final prompt: system instructions + structured reference analysis +
+  // user intent + negative constraints.
+  const basePrompt = buildStrictReferencePrompt(
+    safePrompt,
+    cachedDesignAnalysis,
+    refImageList.length > 1,
+    effectiveFidelity
+  );
+  const finalPrompt = (systemPrompt + '\nUser request: ' + safePrompt + '\n\n' + basePrompt + '\n\nNEGATIVE: ' + negativePrompt)
+    .slice(0, DALLE3_MAX_PROMPT_LENGTH);
+
+  // ── Step 8: Generation logs ─────────────────────────────────────────────
+  console.log('[GENERATION] mode=image_to_image');
+  console.log('[GENERATION] strength=' + config.strength);
+  console.log('[GENERATION] prompt=', finalPrompt);
+
+  const openaiRes = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + apiKey
+    },
+    body: JSON.stringify({
+      model: 'dall-e-3',
+      prompt: finalPrompt,
+      n: 1,
+      size: resolvedSize,
+      quality: resolvedQuality,
+      response_format: 'url'
+    })
+  });
+
+  if (!openaiRes.ok) {
+    let errData;
+    try { errData = await openaiRes.json(); } catch (e) { errData = null; }
+    const err = new Error('Image generation service error');
+    err.statusCode = 502;
+    err.errorBody = (errData && errData.error) || { message: err.message };
+    throw err;
+  }
+
+  const openaiData = await openaiRes.json();
+  const imageData = openaiData.data && openaiData.data[0];
+  if (!imageData || !imageData.url) {
+    const err = new Error('No image returned from generation service');
+    err.statusCode = 502;
+    err.errorBody = { message: err.message };
+    throw err;
+  }
+
+  // ── Fidelity validation and auto-regeneration ───────────────────────────
+  // Validate the generated image against the reference.  If the fidelity score
+  // is too low, regenerate once with escalated 'exact' settings.
+  let finalImageUrl = imageData.url;
+  let finalRevisedPrompt = imageData.revised_prompt || safePrompt;
+
+  const validation = await validateImageFidelity(apiKey, refImageList, imageData.url, safePrompt);
+  if (!validation.pass) {
+    console.log(
+      'api/generate-image: fidelity validation FAILED (score=' + validation.score +
+      ', issues="' + validation.issues + '") — regenerating with exact mode'
+    );
+    const escalatedPrompt = (systemPrompt + '\nUser request: ' + safePrompt + '\n\n' +
+      buildStrictReferencePrompt(safePrompt, cachedDesignAnalysis, refImageList.length > 1, 'exact') +
+      '\n\nNEGATIVE: ' + negativePrompt
+    ).slice(0, DALLE3_MAX_PROMPT_LENGTH);
+
+    try {
+      const regenRes = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey
+        },
+        body: JSON.stringify({
+          model: 'dall-e-3',
+          prompt: escalatedPrompt,
+          n: 1,
+          size: resolvedSize,
+          quality: resolvedQuality,
+          response_format: 'url'
+        })
+      });
+      if (regenRes.ok) {
+        const regenData = await regenRes.json();
+        const regenImage = regenData.data && regenData.data[0];
+        if (regenImage && regenImage.url) {
+          finalImageUrl = regenImage.url;
+          finalRevisedPrompt = regenImage.revised_prompt || safePrompt;
+          console.log('api/generate-image: regeneration complete with exact fidelity mode');
+        }
+      }
+    } catch (regenErr) {
+      // Regeneration failure is non-fatal — return the original result.
+      console.warn('api/generate-image: regeneration attempt failed:', regenErr.message);
+    }
+  }
+
+  return { imageUrl: finalImageUrl, revisedPrompt: finalRevisedPrompt };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Content-Type', 'application/json');
@@ -358,7 +572,7 @@ module.exports = async function handler(req, res) {
       referenceImages,
       strictReferenceMode,
       referenceFidelity,
-      hasReferenceImage
+      hasReferenceImage: hasReferenceImageFlag
     } = req.body || {};
 
     // ── Input validation ────────────────────────────────────────────────────
@@ -397,8 +611,7 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // ── Strict reference mode resolution ───────────────────────────────────
-    // Normalise the reference images list (mirrors the pattern used in api/chat.js).
+    // ── Normalise reference images list ─────────────────────────────────────
     const refImageList = [];
     if (Array.isArray(referenceImages) && referenceImages.length > 0) {
       referenceImages.forEach(function (img) {
@@ -413,39 +626,13 @@ module.exports = async function handler(req, res) {
         }
       });
     }
-    // hasReferenceImage can be set explicitly by the caller or derived from the list.
-    const hasReferenceImages = refImageList.length > 0 || hasReferenceImage === true;
 
-    // Resolve the effective fidelity level.
-    //   1. Use the explicit referenceFidelity parameter when it is a valid value.
-    //   2. Fall back to the legacy strictReferenceMode boolean or prompt auto-detection
-    //      and map those to 'high'.
-    //   3. When a reference image is present but no explicit fidelity was given and
-    //      strictReferenceMode was not explicitly set to false, default to 'high'.
-    //   4. Otherwise keep 'balanced' (standard generation).
-    let effectiveFidelity = 'balanced';
-    if (ALLOWED_FIDELITY.includes(referenceFidelity)) {
-      effectiveFidelity = referenceFidelity;
-    } else if (hasReferenceImages && (strictReferenceMode === true || detectStrictFidelityMode(safePrompt))) {
-      effectiveFidelity = 'high';
-    } else if (hasReferenceImages && strictReferenceMode !== false) {
-      // A reference image was uploaded but no explicit fidelity level or legacy flag
-      // was given — default to 'high' so the reference is used as the design blueprint.
-      // Callers that explicitly pass strictReferenceMode: false opt out of this default.
-      effectiveFidelity = 'high';
-    }
+    // ── Step 2: Detect reference image ──────────────────────────────────────
+    // hasReferenceImage is the single source of truth for routing decisions.
+    const hasReferenceImage = refImageList.length > 0 || hasReferenceImageFlag === true;
+    console.log('[DEBUG] hasReferenceImage:', hasReferenceImage);
 
-    const isStrictMode = hasReferenceImages && effectiveFidelity !== 'balanced';
-
-    if (isStrictMode) {
-      console.log(
-        'api/generate-image: strict reference fidelity mode ACTIVE (' + effectiveFidelity + ') — ' +
-        refImageList.length + ' reference image(s), prompt snippet: "' +
-        safePrompt.slice(0, 80) + '"'
-      );
-    }
-
-    // ── OpenAI DALL-E 3 API call ────────────────────────────────────────────
+    // ── OpenAI API key ──────────────────────────────────────────────────────
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -453,122 +640,61 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: { message: 'API key not configured' } });
     }
 
-    // When strict mode is active, analyse the reference image with GPT-4o
-    // Vision to derive a structured design description, then build a
-    // fidelity-reinforced prompt for DALL-E 3.
-    // Store the design analysis so it can be reused if a regeneration is needed.
-    let finalPrompt = safePrompt;
-    let cachedDesignAnalysis = '';
-    if (isStrictMode) {
-      cachedDesignAnalysis = await analyzeReferenceImage(apiKey, refImageList);
-      finalPrompt = buildStrictReferencePrompt(
-        safePrompt,
-        cachedDesignAnalysis,
-        refImageList.length > 1,
-        effectiveFidelity
+    // ── Resolve effective fidelity level (used by image_to_image_route) ─────
+    //   1. Use the explicit referenceFidelity parameter when it is a valid value.
+    //   2. Fall back to the legacy strictReferenceMode boolean or prompt auto-detection.
+    //   3. When a reference image is present with no explicit setting, default to 'high'.
+    //   4. Otherwise keep 'balanced'.
+    let effectiveFidelity = 'balanced';
+    if (ALLOWED_FIDELITY.includes(referenceFidelity)) {
+      effectiveFidelity = referenceFidelity;
+    } else if (hasReferenceImage && (strictReferenceMode === true || detectStrictFidelityMode(safePrompt))) {
+      effectiveFidelity = 'high';
+    } else if (hasReferenceImage && strictReferenceMode !== false) {
+      effectiveFidelity = 'high';
+    }
+
+    if (hasReferenceImage) {
+      console.log(
+        'api/generate-image: strict reference fidelity mode ACTIVE (' + effectiveFidelity + ') — ' +
+        refImageList.length + ' reference image(s), prompt snippet: "' +
+        safePrompt.slice(0, 80) + '"'
       );
-      // DALL-E 3 prompt character limit.
-      finalPrompt = finalPrompt.slice(0, DALLE3_MAX_PROMPT_LENGTH);
     }
 
-    const openaiRes = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'dall-e-3',
-        prompt: finalPrompt,
-        n: 1,
-        size: resolvedSize,
-        quality: resolvedQuality,
-        response_format: 'url'
-      })
-    });
-
-    if (!openaiRes.ok) {
-      let errData;
-      try { errData = await openaiRes.json(); } catch (e) { errData = null; }
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(502).json({
-        error: (errData && errData.error) || { message: 'Image generation service error' }
+    // ── Step 3: Route to the appropriate generation path ────────────────────
+    let result;
+    if (hasReferenceImage) {
+      console.log('[ROUTE] image_to_image_route');
+      result = await generateImageWithReference({
+        apiKey,
+        safePrompt,
+        refImageList,
+        effectiveFidelity,
+        resolvedSize,
+        resolvedQuality
       });
-    }
-
-    const openaiData = await openaiRes.json();
-    const imageData = openaiData.data && openaiData.data[0];
-    if (!imageData || !imageData.url) {
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(502).json({ error: { message: 'No image returned from generation service' } });
-    }
-
-    // ── Fidelity validation and auto-regeneration ───────────────────────────
-    // When strict mode is active and reference images are present, validate the
-    // generated image against the reference using GPT-4o Vision.  If the fidelity
-    // score is too low, regenerate once with escalated 'exact' settings so the
-    // result more faithfully reproduces the uploaded reference.
-    let finalImageUrl = imageData.url;
-    let finalRevisedPrompt = imageData.revised_prompt || safePrompt;
-
-    if (isStrictMode && refImageList.length > 0) {
-      const validation = await validateImageFidelity(apiKey, refImageList, imageData.url, safePrompt);
-      if (!validation.pass) {
-        console.log(
-          'api/generate-image: fidelity validation FAILED (score=' + validation.score +
-          ', issues="' + validation.issues + '") — regenerating with exact mode'
-        );
-        // Escalate to 'exact' fidelity.  Reuse the cached design analysis to avoid
-        // a second GPT-4o Vision analysis call.
-        const escalatedPrompt = buildStrictReferencePrompt(
-          safePrompt,
-          cachedDesignAnalysis,
-          refImageList.length > 1,
-          'exact'
-        ).slice(0, DALLE3_MAX_PROMPT_LENGTH);
-
-        try {
-          const regenRes = await fetch('https://api.openai.com/v1/images/generations', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-              model: 'dall-e-3',
-              prompt: escalatedPrompt,
-              n: 1,
-              size: resolvedSize,
-              quality: resolvedQuality,
-              response_format: 'url'
-            })
-          });
-          if (regenRes.ok) {
-            const regenData = await regenRes.json();
-            const regenImage = regenData.data && regenData.data[0];
-            if (regenImage && regenImage.url) {
-              finalImageUrl = regenImage.url;
-              finalRevisedPrompt = regenImage.revised_prompt || safePrompt;
-              console.log('api/generate-image: regeneration complete with exact fidelity mode');
-            }
-          }
-        } catch (regenErr) {
-          // Regeneration failure is non-fatal — return the original result.
-          console.warn('api/generate-image: regeneration attempt failed:', regenErr.message);
-        }
-      }
+    } else {
+      console.log('[ROUTE] text_to_image_route');
+      result = await generateImageFromText({
+        apiKey,
+        safePrompt,
+        resolvedSize,
+        resolvedQuality
+      });
     }
 
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({
-      imageUrl: finalImageUrl,
-      revisedPrompt: finalRevisedPrompt
+      imageUrl: result.imageUrl,
+      revisedPrompt: result.revisedPrompt
     });
   } catch (err) {
     console.error('api/generate-image error:', err);
     if (!res.headersSent) {
       res.setHeader('Content-Type', 'application/json');
-      return res.status(500).json({ error: { message: err.message || 'Internal server error' } });
+      const statusCode = err.statusCode || 500;
+      return res.status(statusCode).json({ error: err.errorBody || { message: err.message || 'Internal server error' } });
     }
   }
 };
