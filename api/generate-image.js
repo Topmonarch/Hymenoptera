@@ -18,7 +18,7 @@
 const FINAL_PROMPT =
   'Turn this drawing into a realistic image. Keep the same design. Add realistic materials, lighting, and depth.';
 
-const REPLICATE_ENDPOINT = 'https://api.replicate.com/v1/models/stability-ai/sdxl/predictions';
+const REPLICATE_ENDPOINT = 'https://api.replicate.com/v1/models/stability-ai/sdxl-img2img/predictions';
 const POLL_INTERVAL_MS = 2000;
 const TIMEOUT_MS = 60000;
 
