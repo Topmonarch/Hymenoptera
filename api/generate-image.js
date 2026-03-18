@@ -1,26 +1,22 @@
 // api/generate-image.js — Vercel serverless handler for /api/generate-image
 //
 // Accepts POST { referenceImages }
-//   referenceImages : array of { data: string, mimeType?: string } where
+//   referenceImages : array of { data: string } where
 //                     data is either a base64 data URL or a raw base64 string.
 //
 // Flow:
 //   1. Extract the first reference image from referenceImages.
 //   2. Normalise it to a base64 data URL (data:<mime>;base64,<data>).
-//   3. POST to https://api.replicate.com/v1/predictions using
-//      version "db21e45d6b3a3d5a3d1f9a3c1b2f8c0f4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f" with the image
-//      and a fixed realistic-render prompt.
-//   4. Poll the returned URL until the prediction succeeds (max 60 s).
-//   5. Return { imageUrl, revisedPrompt } as JSON.
+//   3. Call OpenAI Images API (POST /v1/images/edits) with the image and a
+//      fixed realistic-render prompt.
+//   4. Return { imageUrl } as JSON.
 
 'use strict';
 
 const FINAL_PROMPT =
   'Convert this exact drawing into a highly realistic image. Preserve the exact shape, structure, and proportions. Do not change the design. Only enhance realism.';
 
-const REPLICATE_ENDPOINT = 'https://api.replicate.com/v1/predictions';
-const POLL_INTERVAL_MS = 2000;
-const TIMEOUT_MS = 60000;
+const OPENAI_IMAGES_EDITS_URL = 'https://api.openai.com/v1/images/edits';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
@@ -36,8 +32,8 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: { message: 'referenceImages array is required' } });
     }
 
-    if (!process.env.REPLICATE_API_TOKEN) {
-      return res.status(500).json({ error: { message: 'REPLICATE_API_TOKEN is not configured' } });
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: { message: 'OPENAI_API_KEY is not configured' } });
     }
 
     // Extract the first reference image.
@@ -56,85 +52,65 @@ module.exports = async function handler(req, res) {
     if (rawData.startsWith('data:')) {
       imageDataUrl = rawData;
     } else {
-      const mimeType = (firstImage && typeof firstImage.mimeType === 'string')
-        ? firstImage.mimeType
-        : 'image/png';
-      imageDataUrl = `data:${mimeType};base64,${rawData}`;
+      imageDataUrl = `data:image/png;base64,${rawData}`;
     }
 
-    console.log('[REPLICATE] Starting image-to-image prediction');
+    // Extract mime type and base64 payload from data URL.
+    const matches = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!matches) {
+      return res.status(400).json({ error: { message: 'Invalid base64 image data URL' } });
+    }
+    const mimeType = matches[1];
+    const base64Data = matches[2];
+    const imageBuffer = Buffer.from(base64Data, 'base64');
 
-    // Create the prediction.
-    const createRes = await fetch(REPLICATE_ENDPOINT, {
+    // Derive a sensible filename extension from the mime type.
+    const ext = mimeType === 'image/jpeg' ? 'jpg'
+      : mimeType === 'image/webp' ? 'webp'
+      : mimeType === 'image/gif' ? 'gif'
+      : 'png';
+    const filename = `image.${ext}`;
+
+    console.log('[OPENAI] Starting image edit');
+
+    // Build multipart form data for OpenAI Images Edits API.
+    const formData = new FormData();
+    const imageBlob = new Blob([imageBuffer], { type: mimeType });
+    formData.append('image', imageBlob, filename);
+    formData.append('prompt', FINAL_PROMPT);
+    formData.append('n', 1);
+    formData.append('size', '1024x1024');
+
+    const openaiRes = await fetch(OPENAI_IMAGES_EDITS_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
-        'Content-Type': 'application/json'
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
       },
-      body: JSON.stringify({
-        version: "db21e45d6b3a3d5a3d1f9a3c1b2f8c0f4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f",
-        input: {
-          prompt: FINAL_PROMPT,
-          image: imageDataUrl,
-          strength: 0.7
-        }
-      })
+      body: formData
     });
 
-    const createBodyText = await createRes.text();
-    console.log('[REPLICATE] Create status:', createRes.status);
+    const openaiBodyText = await openaiRes.text();
+    console.log('[OPENAI] Response status:', openaiRes.status);
 
-    if (!createRes.ok) {
-      throw new Error(`Replicate API error ${createRes.status}: ${createBodyText}`);
+    if (!openaiRes.ok) {
+      throw new Error(`OpenAI API error ${openaiRes.status}: ${openaiBodyText}`);
     }
 
-    let prediction;
+    let openaiData;
     try {
-      prediction = JSON.parse(createBodyText);
+      openaiData = JSON.parse(openaiBodyText);
     } catch (e) {
-      throw new Error(`Failed to parse Replicate response: ${createBodyText}`);
+      throw new Error(`Failed to parse OpenAI response: ${openaiBodyText}`);
     }
 
-    if (!prediction.urls || !prediction.urls.get) {
-      throw new Error('Replicate did not return a polling URL: ' + JSON.stringify(prediction));
-    }
-
-    // Poll until the prediction completes (max TIMEOUT_MS).
-    const pollUrl = prediction.urls.get;
-    const deadline = Date.now() + TIMEOUT_MS;
-    let result = prediction;
-
-    while (
-      result.status !== 'succeeded' &&
-      result.status !== 'failed' &&
-      result.status !== 'canceled'
-    ) {
-      if (Date.now() >= deadline) {
-        throw new Error(`Replicate prediction timed out after ${TIMEOUT_MS / 1000} seconds`);
-      }
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
-      const pollRes = await fetch(pollUrl, {
-        headers: { 'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}` }
-      });
-      if (!pollRes.ok) {
-        throw new Error(`Replicate polling error ${pollRes.status}: ${await pollRes.text()}`);
-      }
-      result = await pollRes.json();
-      console.log('[REPLICATE] Prediction status:', result.status);
-    }
-
-    if (result.status !== 'succeeded') {
-      throw new Error(`Replicate prediction failed with status: ${result.status}`);
-    }
-
-    const imageUrl = Array.isArray(result.output) ? result.output[0] : result.output;
+    const imageUrl = openaiData.data && openaiData.data[0] && openaiData.data[0].url;
     if (!imageUrl) {
-      throw new Error('Replicate prediction succeeded but returned no output image URL');
+      throw new Error('OpenAI returned no image URL: ' + JSON.stringify(openaiData));
     }
 
-    console.log('[REPLICATE] Output URL:', imageUrl);
+    console.log('[OPENAI] Image URL received');
 
-    return res.status(200).json({ imageUrl, revisedPrompt: FINAL_PROMPT });
+    return res.status(200).json({ imageUrl });
 
   } catch (err) {
     console.error('api/generate-image error:', err);
