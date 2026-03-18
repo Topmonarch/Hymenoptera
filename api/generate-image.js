@@ -540,27 +540,25 @@ do not replace design`;
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "stability-ai/sdxl",
+      version: "c221b2b8ef5279883d58d9d1b5d3a6b0c0f9e3b0fbb0c2f5c5d4f8b6f6d6c1d3",
       input: {
         prompt: finalPrompt,
         image: uploadedImageUrl,
-        strength
+        strength: strength
       }
     })
   });
 
   const prediction = await replicateRes.json();
-  console.log("Replicate full response:", prediction);
+  console.log("REPLICATE RESPONSE:", prediction);
 
-  if (prediction.error) {
-    throw new Error(prediction.error);
+  if (!prediction.urls || !prediction.urls.get) {
+    console.error("REPLICATE ERROR:", prediction);
+    throw new Error("Replicate did not return polling URL");
   }
 
   // Poll for completion (max 20 seconds)
-  const pollUrl = prediction?.urls?.get;
-  if (!pollUrl) {
-    throw new Error("Replicate prediction did not return a polling URL");
-  }
+  const pollUrl = prediction.urls.get;
 
   const TIMEOUT_MS = 20000;
   const POLL_INTERVAL_MS = 1000;
