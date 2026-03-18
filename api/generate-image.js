@@ -74,7 +74,7 @@ module.exports = async function handler(req, res) {
      body: JSON.stringify({
   input: {
     prompt: FINAL_PROMPT,
-    image: imageDataUrl,
+   init_image: imageDataUrl,
     strength: 0.7
   }
 })
