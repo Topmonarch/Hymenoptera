@@ -11,7 +11,10 @@ module.exports = async function handler(req, res) {
     const formData = new FormData();
     formData.append('model', 'gpt-image-1');
     formData.append('prompt', prompt);
-    formData.append('image', new Blob([imageBuffer], { type: 'image/png' }), 'image.png');
+    formData.append('image', imageBuffer, {
+  filename: 'image.png',
+  contentType: 'image/png'
+});
     formData.append('size', '1024x1024');
 
     const openaiRes = await fetch('https://api.openai.com/v1/images/edits', {
