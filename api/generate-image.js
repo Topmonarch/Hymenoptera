@@ -8,6 +8,7 @@ module.exports = async function handler(req, res) {
     const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '');
     const imageBuffer = Buffer.from(base64Data, 'base64');
 
+    const FormData = require('form-data');
     const formData = new FormData();
     formData.append('model', 'gpt-image-1');
     formData.append('prompt', prompt);
