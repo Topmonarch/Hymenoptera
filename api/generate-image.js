@@ -7,18 +7,14 @@
 // Flow:
 //   1. Extract the first reference image from referenceImages.
 //   2. Normalise it to a base64 data URL (data:<mime>;base64,<data>).
-//   3. Call OpenAI Images API (POST /v1/images/edits) with the image and a
+//   3. Call OpenAI Images API (POST /v1/images) with the image and a
 //      fixed realistic-render prompt.
 //   4. Return { imageUrl } as JSON.
 
 'use strict';
 
-const FormData = require('form-data');
-
 const FINAL_PROMPT =
   'Convert this exact drawing into a highly realistic image. Preserve the exact shape, structure, and proportions. Do not change the design. Only enhance realism.';
-
-const OPENAI_IMAGES_EDITS_URL = 'https://api.openai.com/v1/images/edits';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
@@ -57,41 +53,20 @@ module.exports = async function handler(req, res) {
       imageDataUrl = `data:image/png;base64,${rawData}`;
     }
 
-    // Extract mime type and base64 payload from data URL.
-    const matches = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
-    if (!matches) {
-      return res.status(400).json({ error: { message: 'Invalid base64 image data URL' } });
-    }
-    const mimeType = matches[1];
-    const base64Data = matches[2];
-    const imageBuffer = Buffer.from(base64Data, 'base64');
+    console.log('[OPENAI] Starting image generation');
 
-    // Derive a sensible filename extension from the mime type.
-    const ext = mimeType === 'image/jpeg' ? 'jpg'
-      : mimeType === 'image/webp' ? 'webp'
-      : mimeType === 'image/gif' ? 'gif'
-      : 'png';
-    const filename = `image.${ext}`;
-
-    console.log('[OPENAI] Starting image edit');
-
-    // Build multipart form data for OpenAI Images Edits API.
-    const formData = new FormData();
-    formData.append('image', imageBuffer, {
-      filename: filename,
-      contentType: mimeType
-    });
-    formData.append('prompt', FINAL_PROMPT);
-    formData.append('n', 1);
-    formData.append('size', '1024x1024');
-
-    const openaiRes = await fetch(OPENAI_IMAGES_EDITS_URL, {
+    const openaiRes = await fetch('https://api.openai.com/v1/images', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        ...formData.getHeaders()
+        'Content-Type': 'application/json'
       },
-      body: formData
+      body: JSON.stringify({
+        model: "gpt-image-1",
+        prompt: FINAL_PROMPT,
+        size: "1024x1024",
+        image: imageDataUrl
+      })
     });
 
     const openaiBodyText = await openaiRes.text();
