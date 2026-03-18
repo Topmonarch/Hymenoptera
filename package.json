@@ -7,6 +7,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "form-data": "^4.0.5",
     "nodemailer": "^7.0.11",
     "stripe": "^16.12.0"
   }
