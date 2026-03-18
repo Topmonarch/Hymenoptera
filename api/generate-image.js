@@ -47,6 +47,8 @@
 
 'use strict';
 
+console.log('API loaded');
+
 // Usage limits helper — loaded lazily so a missing / misconfigured module
 // never blocks the image generation flow.
 let _usageLimits = null;
@@ -526,3 +528,187 @@ do not replace design`;
     imageUrl: imageUrl || "",
     revisedPrompt: finalPrompt
   };
+}
+
+// ── Vercel serverless handler ─────────────────────────────────────────────────
+
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(405).json({ error: { message: 'Method not allowed' } });
+  }
+
+  try {
+    const {
+      prompt,
+      userId,
+      plan,
+      sessionId,
+      size,
+      quality,
+      referenceImages,
+      strictReferenceMode,
+      referenceFidelity,
+      hasReferenceImage
+    } = req.body || {};
+
+    // ── Input validation ──────────────────────────────────────────────────────
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(400).json({ error: { message: 'prompt (string) is required' } });
+    }
+
+    // Sanitize prompt: trim whitespace and limit to DALL-E 3 max length.
+    const safePrompt = prompt.trim().slice(0, DALLE3_MAX_PROMPT_LENGTH);
+
+    // Resolve size: use the provided value if valid, otherwise default.
+    const resolvedSize = ALLOWED_SIZES.includes(size) ? size : '1024x1024';
+
+    // Resolve quality: use the provided value if valid, otherwise default.
+    const resolvedQuality = ALLOWED_QUALITY.includes(quality) ? quality : 'standard';
+
+    // ── Daily image generation quota ──────────────────────────────────────────
+
+    if (_usageLimits) {
+      const trackingId = (userId && userId !== 'guest') ? userId : sessionId;
+      if (trackingId) {
+        try {
+          const KNOWN_PLANS = Object.keys(_usageLimits.PLAN_LIMITS);
+          const rawPlan = typeof plan === 'string' ? plan.toLowerCase() : '';
+          const userPlan = KNOWN_PLANS.includes(rawPlan) ? rawPlan : 'starter';
+          const result = await _usageLimits.checkAndTrack(trackingId, userPlan, 'image');
+          if (!result.allowed) {
+            res.setHeader('Content-Type', 'application/json');
+            return res.status(429).json({
+              error: { message: result.error || 'Daily image generation limit reached. Upgrade your plan or wait for the reset.' }
+            });
+          }
+        } catch (e) {
+          // Usage limit check failure is non-fatal — let the request proceed.
+          console.warn('api/generate-image: usage limit check failed:', e.message);
+        }
+      }
+    }
+
+    // ── Reference image resolution ────────────────────────────────────────────
+    // Normalize the reference images list.
+    const refImageList = [];
+    if (Array.isArray(referenceImages) && referenceImages.length > 0) {
+      referenceImages.forEach(function (img) {
+        if (
+          img &&
+          typeof img === 'object' &&
+          typeof img.data === 'string' &&
+          img.data.length > 0 &&
+          (DATA_URL_PATTERN.test(img.data) || /^[A-Za-z0-9+/]/.test(img.data))
+        ) {
+          refImageList.push(img);
+        }
+      });
+    }
+
+    // hasReferenceImage can be set explicitly or derived from the images list.
+    const hasRefImages = refImageList.length > 0 || hasReferenceImage === true;
+
+    // ── Effective fidelity resolution ─────────────────────────────────────────
+    //   1. Use the explicit referenceFidelity parameter when it is a valid value.
+    //   2. Fall back to strictReferenceMode boolean or prompt auto-detection.
+    //   3. When reference images are present, default to 'high'.
+    //   4. Otherwise keep 'balanced'.
+    let effectiveFidelity = 'balanced';
+    if (ALLOWED_FIDELITY.includes(referenceFidelity)) {
+      effectiveFidelity = referenceFidelity;
+    } else if (hasRefImages && (strictReferenceMode === true || detectStrictFidelityMode(safePrompt))) {
+      effectiveFidelity = 'high';
+    } else if (hasRefImages && strictReferenceMode !== false) {
+      // Reference images present but no explicit flag — default to 'high'.
+      // Callers that explicitly pass strictReferenceMode: false opt out.
+      effectiveFidelity = 'high';
+    }
+
+    if (hasRefImages && effectiveFidelity !== 'balanced') {
+      console.log(
+        'api/generate-image: STRICT_REFERENCE_MODE ACTIVE (' + effectiveFidelity + ') — ' +
+        refImageList.length + ' reference image(s), prompt snippet: "' +
+        safePrompt.slice(0, 80) + '"'
+      );
+    }
+
+    // ── OpenAI API key ────────────────────────────────────────────────────────
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(500).json({ error: { message: 'API key not configured' } });
+    }
+
+    // ── Route to appropriate generation path ──────────────────────────────────
+
+    let imageUrl, revisedPrompt;
+
+    if (!hasRefImages) {
+      // text_to_image_route — no reference image
+      const result = await generateImageFromText({ apiKey, safePrompt, resolvedSize, resolvedQuality });
+      imageUrl = result.imageUrl;
+      revisedPrompt = result.revisedPrompt;
+    } else {
+      // image_to_image_route — reference image present
+      const result = await generateImageWithReference({
+        apiKey,
+        safePrompt,
+        refImageList,
+        effectiveFidelity,
+        resolvedSize,
+        resolvedQuality
+      });
+      imageUrl = result.imageUrl;
+      revisedPrompt = result.revisedPrompt;
+
+      // ── Fidelity validation and auto-regeneration ─────────────────────────
+      // When strict reference mode is active, validate whether the generated
+      // image faithfully reproduces the reference design.  If the score is
+      // too low, regenerate once with escalated 'exact' settings.
+      if (effectiveFidelity !== 'balanced') {
+        const validation = await validateImageFidelity(apiKey, refImageList, imageUrl, safePrompt);
+        if (!validation.pass) {
+          console.log(
+            'api/generate-image: fidelity validation FAILED (score=' + validation.score +
+            ', issues="' + validation.issues + '") — regenerating with exact mode'
+          );
+          try {
+            const regenResult = await generateImageWithReference({
+              apiKey,
+              safePrompt,
+              refImageList,
+              effectiveFidelity: 'exact',
+              resolvedSize,
+              resolvedQuality
+            });
+            if (regenResult.imageUrl) {
+              imageUrl = regenResult.imageUrl;
+              revisedPrompt = regenResult.revisedPrompt;
+              console.log('api/generate-image: regeneration complete with exact fidelity mode');
+            }
+          } catch (regenErr) {
+            // Regeneration failure is non-fatal — return the original image.
+            console.warn('api/generate-image: regeneration attempt failed:', regenErr.message);
+          }
+        }
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(200).json({ imageUrl, revisedPrompt });
+
+  } catch (err) {
+    console.error('api/generate-image error:', err);
+    const statusCode = err.statusCode || 500;
+    if (!res.headersSent) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(statusCode).json({
+        error: err.errorBody || { message: err.message || 'Internal server error' }
+      });
+    }
+  }
+};
