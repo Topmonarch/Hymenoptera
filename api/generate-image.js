@@ -17,7 +17,10 @@
 //                           the text prompt alone using DALL-E 3.
 //   image_to_image_route  — called when at least one reference image is uploaded;
 //                           converts the drawing to a realistic image using SDXL on
-//                           Replicate with strength=0.7.
+//                           Replicate with strength=0.7. Base64 images are sent
+//                           directly to Replicate via the model endpoint
+//                           (/v1/models/stability-ai/sdxl/predictions) so the latest
+//                           model version is always used without a hard-coded hash.
 //
 // The endpoint:
 //   1. Validates the request fields.
@@ -39,8 +42,6 @@ try {
 } catch (e) {
   console.warn('api/generate-image: usage limits unavailable:', e.message);
 }
-
-const FormData = require('form-data');
 
 // Allowed image sizes for DALL-E 3.
 const ALLOWED_SIZES = ['1024x1024', '1792x1024', '1024x1792'];
@@ -102,57 +103,9 @@ async function generateImageFromText(params) {
 }
 
 /**
- * uploadImageToTempUrl — uploads a base64 data URL to tmpfiles.org and returns
- * a publicly accessible download URL.  SDXL (and most image-to-image models on
- * Replicate) require a public HTTP URL rather than a raw base64 string.
- *
- * @param {string} base64DataUrl  A data URL like "data:image/png;base64,..."
- * @returns {Promise<string>}     A public https:// URL pointing to the uploaded file
- */
-async function uploadImageToTempUrl(base64DataUrl) {
-  const match = base64DataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
-  if (!match) {
-    throw new Error('Invalid base64 data URL format');
-  }
-  const mimeType = match[1];
-  const base64Data = match[2];
-  const buffer = Buffer.from(base64Data, 'base64');
-  const ext = mimeType.split('/')[1] || 'png';
-
-  const formData = new FormData();
-  formData.append('file', buffer, { filename: `image.${ext}`, contentType: mimeType });
-
-  let uploadRes;
-  try {
-    uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', {
-      method: 'POST',
-      headers: formData.getHeaders(),
-      body: formData
-    });
-  } catch (networkErr) {
-    throw new Error(`Network error while uploading image to tmpfiles.org: ${networkErr.message}`);
-  }
-
-  if (!uploadRes.ok) {
-    throw new Error(`Failed to upload image to tmpfiles.org: HTTP ${uploadRes.status}`);
-  }
-
-  const uploadData = await uploadRes.json();
-  if (uploadData.status !== 'success' || !uploadData.data?.url) {
-    throw new Error('Unexpected response from tmpfiles.org: ' + JSON.stringify(uploadData));
-  }
-
-  // tmpfiles.org returns links like https://tmpfiles.org/1234/image.png
-  // The direct-download path requires /dl/ prefix, e.g. https://tmpfiles.org/dl/1234/image.png
-  const parsedUrl = new URL(uploadData.data.url);
-  parsedUrl.pathname = '/dl' + parsedUrl.pathname;
-  return parsedUrl.toString();
-}
-
-/**
  * image_to_image_route — converts a drawing into a realistic image using SDXL
- * on Replicate.  Uploads the base64 image to get a public URL, sends it to
- * Replicate, polls until complete (up to 60 s), and returns the result URL.
+ * on Replicate.  Sends the base64 image directly to Replicate (no intermediate
+ * upload), polls until complete (up to 60 s), and returns the result URL.
  *
  * @param {{ refImageList: Array }} params
  * @returns {Promise<{ imageUrl: string, revisedPrompt: string }>}
@@ -164,56 +117,62 @@ async function generateImageWithReference(params) {
     throw new Error('REPLICATE_API_TOKEN is not configured');
   }
 
-  const finalPrompt = 'Turn this drawing into a realistic image. Keep the same design, shape, and structure. Add realistic materials, lighting, and depth.';
+  const finalPrompt = 'Turn this drawing into a realistic image. Keep the same design. Add realistic materials, lighting, and depth.';
   const strength = 0.7;
 
   console.log('[GENERATION] mode=image_to_image');
   console.log('[GENERATION] strength=' + strength);
   console.log('[GENERATION] prompt=', finalPrompt);
 
-  // SDXL on Replicate requires a public HTTP URL — upload the base64 image first.
+  // Build base64 data URL from reference image and send directly to Replicate.
   const base64DataUrl = refImageList[0].data.startsWith('data:')
     ? refImageList[0].data
     : `data:${refImageList[0].mimeType || 'image/png'};base64,${refImageList[0].data}`;
 
-  const uploadedImageUrl = await uploadImageToTempUrl(base64DataUrl);
-  console.log('Using image URL:', uploadedImageUrl);
+  console.log('[GENERATION] Sending base64 image directly to Replicate');
 
-  const replicateRes = await fetch('https://api.replicate.com/v1/predictions', {
+  // Use the model endpoint instead of a version hash so the latest SDXL
+  // model is always used without needing to update a hard-coded SHA.
+  const replicateRes = await fetch('https://api.replicate.com/v1/models/stability-ai/sdxl/predictions', {
     method: 'POST',
     headers: {
       'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      version: 'c221b2b8ef5279883d58d9d1b5d3a6b0c0f9e3b0fbb0c2f5c5d4f8b6f6d6c1d3',
       input: {
         prompt: finalPrompt,
-        image: uploadedImageUrl,
+        image: base64DataUrl,
         strength: strength
       }
     })
   });
 
+  const replicateBodyText = await replicateRes.text();
+  console.log('[REPLICATE] HTTP status:', replicateRes.status);
+  console.log('[REPLICATE] Response body:', replicateBodyText);
+
   if (!replicateRes.ok) {
-    const errorText = await replicateRes.text();
-    console.error('Replicate API error response:', errorText);
-    throw new Error(`Replicate API request failed with status ${replicateRes.status}: ${errorText}`);
+    throw new Error(`Replicate API request failed with status ${replicateRes.status}: ${replicateBodyText}`);
   }
 
-  const prediction = await replicateRes.json();
-  console.log('REPLICATE RESPONSE:', prediction);
+  let prediction;
+  try {
+    prediction = JSON.parse(replicateBodyText);
+  } catch (e) {
+    throw new Error(`Failed to parse Replicate response: ${replicateBodyText}`);
+  }
 
   if (!prediction.urls || !prediction.urls.get) {
-    console.error('REPLICATE ERROR:', prediction);
-    throw new Error('Replicate did not return polling URL');
+    console.error('[REPLICATE] Full response (missing polling URL):', JSON.stringify(prediction, null, 2));
+    throw new Error('Replicate prediction did not return a polling URL. Full response: ' + JSON.stringify(prediction));
   }
 
   // Poll for completion (max 60 seconds)
   const pollUrl = prediction.urls.get;
 
   const TIMEOUT_MS = 60000;
-  const POLL_INTERVAL_MS = 1000;
+  const POLL_INTERVAL_MS = 2000; // 2 s keeps log noise low while staying responsive
   const deadline = Date.now() + TIMEOUT_MS;
 
   let result = prediction;
@@ -228,7 +187,7 @@ async function generateImageWithReference(params) {
       }
     });
     result = await pollRes.json();
-    console.log('Replicate prediction status:', result.status);
+    console.log('[REPLICATE] Prediction status:', result.status);
   }
 
   if (result.status !== 'succeeded') {
@@ -236,9 +195,14 @@ async function generateImageWithReference(params) {
   }
 
   const imageUrl = Array.isArray(result.output) ? result.output[0] : result.output;
+  if (!imageUrl) {
+    throw new Error('Replicate prediction succeeded but returned no output image URL');
+  }
+
+  console.log('[GENERATION] Result image URL:', imageUrl);
 
   return {
-    imageUrl: imageUrl || '',
+    imageUrl,
     revisedPrompt: finalPrompt
   };
 }
