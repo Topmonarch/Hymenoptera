@@ -532,6 +532,8 @@ do not replace design`;
   console.log("Using image URL:", uploadedImageUrl);
   console.log("STRENGTH:", strength);
 
+  console.log("FINAL IMAGE SENT:", image);
+
   const replicateRes = await fetch("https://api.replicate.com/v1/predictions", {
     method: "POST",
     headers: {
@@ -613,7 +615,8 @@ module.exports = async function handler(req, res) {
       referenceFidelity,
       hasReferenceImage
     } = req.body || {};
-
+    console.log("REFERENCE IMAGES:", referenceImages);
+    
     // ── Input validation ──────────────────────────────────────────────────────
 
     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
