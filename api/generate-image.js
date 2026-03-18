@@ -470,27 +470,57 @@ do not replace design`;
   console.log('[GENERATION] strength=' + config.strength);
   console.log('[GENERATION] prompt=', finalPrompt);
 
- const replicateRes = await fetch("https://api.replicate.com/v1/predictions", {
-  method: "POST",
-  headers: {
-    "Authorization": `Token ${process.env.REPLICATE_API_TOKEN}`,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    version: "stability-ai/sdxl",
-    input: {
-      image: refImageList[0].data,
-      prompt: finalPrompt,
-      strength: 0.85
+  const replicateRes = await fetch("https://api.replicate.com/v1/predictions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Token ${process.env.REPLICATE_API_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      version: "7762fd07cf82c948538e41f63f77d685e02b063e0124a3a7481d46b8388c97a2",
+      input: {
+        image: refImageList[0].data,
+        prompt: finalPrompt,
+        strength: 0.85
+      }
+    })
+  });
+
+  const prediction = await replicateRes.json();
+  console.log("Replicate prediction created:", prediction);
+
+  // Poll for completion (max 20 seconds)
+  const pollUrl = prediction?.urls?.get;
+  if (!pollUrl) {
+    throw new Error("Replicate prediction did not return a polling URL");
+  }
+
+  const TIMEOUT_MS = 20000;
+  const POLL_INTERVAL_MS = 1000;
+  const deadline = Date.now() + TIMEOUT_MS;
+
+  let result = prediction;
+  while (result.status !== "succeeded" && result.status !== "failed" && result.status !== "canceled") {
+    if (Date.now() >= deadline) {
+      throw new Error("Replicate prediction timed out after 20 seconds");
     }
-  })
-});
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    const pollRes = await fetch(pollUrl, {
+      headers: {
+        "Authorization": `Token ${process.env.REPLICATE_API_TOKEN}`
+      }
+    });
+    result = await pollRes.json();
+    console.log("Replicate prediction status:", result.status);
+  }
 
-const replicateData = await replicateRes.json();
+  if (result.status !== "succeeded") {
+    throw new Error(`Replicate prediction failed with status: ${result.status}`);
+  }
 
-console.log("Replicate response:", replicateData);
+  const imageUrl = Array.isArray(result.output) ? result.output[0] : result.output;
 
-return {
-  imageUrl: replicateData?.urls?.get || "",
-  revisedPrompt: finalPrompt
-};
+  return {
+    imageUrl: imageUrl || "",
+    revisedPrompt: finalPrompt
+  };
