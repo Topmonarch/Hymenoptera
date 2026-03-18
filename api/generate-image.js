@@ -447,7 +447,7 @@ do not replace design`;
   // ── Step 6: Low-drift configuration ────────────────────────────────────
   const config = {
     mode: 'image_to_image',
-    strength: 0.9,
+    strength: 0.2,
     creativity: 'low',
     variation: 'low'
   };
@@ -471,6 +471,15 @@ do not replace design`;
   console.log('[GENERATION] mode=image_to_image');
   console.log('[GENERATION] strength=' + config.strength);
   console.log('[GENERATION] prompt=', finalPrompt);
+  console.log("USING IMAGE-TO-IMAGE ROUTE");
+
+  const image = refImageList[0].data.startsWith("data:")
+    ? refImageList[0].data
+    : `data:${refImageList[0].mimeType || "image/png"};base64,${refImageList[0].data}`;
+  const strength = config.strength;
+
+  console.log("IMAGE INPUT:", image);
+  console.log("STRENGTH:", strength);
 
   const replicateRes = await fetch("https://api.replicate.com/v1/predictions", {
     method: "POST",
@@ -481,11 +490,9 @@ do not replace design`;
     body: JSON.stringify({
       version: "7762fd07cf82c948538e41f63f77d685e02b063e0124a3a7481d46b8388c97a2",
       input: {
-        image: refImageList[0].data.startsWith("data:")
-          ? refImageList[0].data
-          : `data:${refImageList[0].mimeType || "image/png"};base64,${refImageList[0].data}`,
+        image,
         prompt: finalPrompt,
-        strength: 0.85
+        strength
       }
     })
   });
