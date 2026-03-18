@@ -479,7 +479,9 @@ do not replace design`;
     body: JSON.stringify({
       version: "7762fd07cf82c948538e41f63f77d685e02b063e0124a3a7481d46b8388c97a2",
       input: {
-        image: refImageList[0].data,
+        image: refImageList[0].data.startsWith("data:")
+          ? refImageList[0].data
+          : `data:${refImageList[0].mimeType || "image/png"};base64,${refImageList[0].data}`,
         prompt: finalPrompt,
         strength: 0.85
       }
