@@ -470,235 +470,27 @@ do not replace design`;
   console.log('[GENERATION] strength=' + config.strength);
   console.log('[GENERATION] prompt=', finalPrompt);
 
-  const openaiRes = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + apiKey
-    },
-    body: JSON.stringify({
-      model: 'dall-e-3',
+ const replicateRes = await fetch("https://api.replicate.com/v1/predictions", {
+  method: "POST",
+  headers: {
+    "Authorization": `Token ${process.env.REPLICATE_API_TOKEN}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    version: "stability-ai/sdxl",
+    input: {
+      image: refImageList[0].data,
       prompt: finalPrompt,
-      n: 1,
-      size: resolvedSize,
-      quality: resolvedQuality,
-      response_format: 'url'
-    })
-  });
-
-  if (!openaiRes.ok) {
-    let errData;
-    try { errData = await openaiRes.json(); } catch (e) { errData = null; }
-    const err = new Error('Image generation service error');
-    err.statusCode = 502;
-    err.errorBody = (errData && errData.error) || { message: err.message };
-    throw err;
-  }
-
-  const openaiData = await openaiRes.json();
-  const imageData = openaiData.data && openaiData.data[0];
-  if (!imageData || !imageData.url) {
-    const err = new Error('No image returned from generation service');
-    err.statusCode = 502;
-    err.errorBody = { message: err.message };
-    throw err;
-  }
-
-  // ── Fidelity validation and auto-regeneration ───────────────────────────
-  // Validate the generated image against the reference.  If the fidelity score
-  // is too low, regenerate once with escalated 'exact' settings.
-  let finalImageUrl = imageData.url;
-  let finalRevisedPrompt = imageData.revised_prompt || safePrompt;
-
-  const validation = await validateImageFidelity(apiKey, refImageList, imageData.url, safePrompt);
-  if (!validation.pass) {
-    console.log(
-      'api/generate-image: fidelity validation FAILED (score=' + validation.score +
-      ', issues="' + validation.issues + '") — regenerating with exact mode'
-    );
-    const escalatedPrompt = (systemPrompt + '\nUser request: ' + safePrompt + '\n\n' +
-      buildStrictReferencePrompt(safePrompt, cachedDesignAnalysis, refImageList.length > 1, 'exact') +
-      '\n\nNEGATIVE: ' + negativePrompt
-    ).slice(0, DALLE3_MAX_PROMPT_LENGTH);
-
-    try {
-      const regenRes = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + apiKey
-        },
-        body: JSON.stringify({
-          model: 'dall-e-3',
-          prompt: escalatedPrompt,
-          n: 1,
-          size: resolvedSize,
-          quality: resolvedQuality,
-          response_format: 'url'
-        })
-      });
-      if (regenRes.ok) {
-        const regenData = await regenRes.json();
-        const regenImage = regenData.data && regenData.data[0];
-        if (regenImage && regenImage.url) {
-          finalImageUrl = regenImage.url;
-          finalRevisedPrompt = regenImage.revised_prompt || safePrompt;
-          console.log('api/generate-image: regeneration complete with exact fidelity mode');
-        }
-      }
-    } catch (regenErr) {
-      // Regeneration failure is non-fatal — return the original result.
-      console.warn('api/generate-image: regeneration attempt failed:', regenErr.message);
+      strength: 0.85
     }
-  }
+  })
+});
 
-  return { imageUrl: finalImageUrl, revisedPrompt: finalRevisedPrompt };
-}
+const replicateData = await replicateRes.json();
 
-module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.setHeader('Content-Type', 'application/json');
-    return res.status(405).json({ error: { message: 'Method not allowed' } });
-  }
+console.log("Replicate response:", replicateData);
 
-  try {
-    const {
-      prompt,
-      userId,
-      plan,
-      sessionId,
-      size,
-      quality,
-      referenceImages,
-      strictReferenceMode,
-      referenceFidelity
-    } = req.body || {};
-
-    // ── Input validation ────────────────────────────────────────────────────
-
-    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(400).json({ error: { message: 'prompt (string) is required' } });
-    }
-
-    // Sanitize prompt: trim whitespace and limit length to avoid abuse.
-    const safePrompt = prompt.trim().slice(0, DALLE3_MAX_PROMPT_LENGTH);
-
-    const resolvedSize = ALLOWED_SIZES.includes(size) ? size : '1024x1024';
-    const resolvedQuality = ALLOWED_QUALITY.includes(quality) ? quality : 'standard';
-
-    // ── Daily image generation quota ────────────────────────────────────────
-
-    if (_usageLimits) {
-      const trackingId = (userId && userId !== 'guest') ? userId : sessionId;
-      if (trackingId) {
-        try {
-          const KNOWN_PLANS = Object.keys(_usageLimits.PLAN_LIMITS);
-          const rawPlan = typeof plan === 'string' ? plan.toLowerCase() : '';
-          const userPlan = KNOWN_PLANS.includes(rawPlan) ? rawPlan : 'starter';
-          const result = await _usageLimits.checkAndTrack(trackingId, userPlan, 'image');
-          if (!result.allowed) {
-            res.setHeader('Content-Type', 'application/json');
-            return res.status(429).json({
-              error: { message: result.error || 'Daily image generation limit reached. Upgrade your plan or wait for the reset.' }
-            });
-          }
-        } catch (e) {
-          // Usage limit check failure is non-fatal — let the request proceed.
-          console.warn('api/generate-image: usage limit check failed:', e.message);
-        }
-      }
-    }
-
-    // ── Normalise reference images list ─────────────────────────────────────
-    const refImageList = [];
-    if (Array.isArray(referenceImages) && referenceImages.length > 0) {
-      referenceImages.forEach(function (img) {
-        if (
-          img &&
-          typeof img === 'object' &&
-          typeof img.data === 'string' &&
-          img.data.length > 0 &&
-          (DATA_URL_PATTERN.test(img.data) || /^[A-Za-z0-9+/]/.test(img.data))
-        ) {
-          refImageList.push(img);
-        }
-      });
-    }
-
-    // ── Step 2: Detect reference image ──────────────────────────────────────
-    // hasReferenceImage is the single source of truth for routing decisions.
-    // Only route to image-to-image when there are actual validated images.
-    const hasReferenceImage = refImageList.length > 0;
-    if (hasReferenceImage) {
-      console.log('[IMAGE DETECTED] ' + refImageList.length + ' reference image(s) uploaded — will use image-to-image mode');
-    } else {
-      console.log('[NO IMAGE] no reference images provided — will use text-to-image mode');
-    }
-
-    // ── OpenAI API key ──────────────────────────────────────────────────────
-
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(500).json({ error: { message: 'API key not configured' } });
-    }
-
-    // ── Resolve effective fidelity level (used by image_to_image_route) ─────
-    //   1. Use the explicit referenceFidelity parameter when it is a valid value.
-    //   2. Fall back to the legacy strictReferenceMode boolean or prompt auto-detection.
-    //   3. When a reference image is present with no explicit setting, default to 'high'.
-    //   4. Otherwise keep 'balanced'.
-    let effectiveFidelity = 'balanced';
-    if (ALLOWED_FIDELITY.includes(referenceFidelity)) {
-      effectiveFidelity = referenceFidelity;
-    } else if (hasReferenceImage && (strictReferenceMode === true || detectStrictFidelityMode(safePrompt))) {
-      effectiveFidelity = 'high';
-    } else if (hasReferenceImage && strictReferenceMode !== false) {
-      effectiveFidelity = 'high';
-    }
-
-    if (hasReferenceImage) {
-      console.log(
-        'api/generate-image: strict reference fidelity mode ACTIVE (' + effectiveFidelity + ') — ' +
-        refImageList.length + ' reference image(s), prompt snippet: "' +
-        safePrompt.slice(0, 80) + '"'
-      );
-    }
-
-    // ── Step 3: Route to the appropriate generation path ────────────────────
-    let result;
-    if (hasReferenceImage) {
-      console.log('[MODE] image-to-image — keeping shape and design from reference image');
-      result = await generateImageWithReference({
-        apiKey,
-        safePrompt,
-        refImageList,
-        effectiveFidelity,
-        resolvedSize,
-        resolvedQuality
-      });
-    } else {
-      console.log('[MODE] text-to-image — generating from prompt only');
-      result = await generateImageFromText({
-        apiKey,
-        safePrompt,
-        resolvedSize,
-        resolvedQuality
-      });
-    }
-
-    res.setHeader('Content-Type', 'application/json');
-    return res.status(200).json({
-      imageUrl: result.imageUrl,
-      revisedPrompt: result.revisedPrompt
-    });
-  } catch (err) {
-    console.error('api/generate-image error:', err);
-    if (!res.headersSent) {
-      res.setHeader('Content-Type', 'application/json');
-      const statusCode = err.statusCode || 500;
-      return res.status(statusCode).json({ error: err.errorBody || { message: err.message || 'Internal server error' } });
-    }
-  }
+return {
+  imageUrl: replicateData?.urls?.get || "",
+  revisedPrompt: finalPrompt
 };
