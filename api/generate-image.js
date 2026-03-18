@@ -18,7 +18,7 @@
 const FINAL_PROMPT =
   'Turn this drawing into a realistic image. Keep the same design. Add realistic materials, lighting, and depth.';
 
-const REPLICATE_ENDPOINT = 'https://api.replicate.com/v1/predictions';
+const REPLICATE_ENDPOINT = 'https://api.replicate.com/v1/models/stability-ai/sdxl/predictions';
 const POLL_INTERVAL_MS = 2000;
 const TIMEOUT_MS = 60000;
 
@@ -71,14 +71,13 @@ module.exports = async function handler(req, res) {
         'Authorization': `Token ${process.env.REPLICATE_API_TOKEN}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        version: '15a3689e3c6c1d8f9c0b63c0d14f7a64e124bdbc5e6f27bb1e6930f33e27e3c8',
-        input: {
-          prompt: FINAL_PROMPT,
-          image: imageDataUrl,
-          strength: 0.7
-        }
-      })
+     body: JSON.stringify({
+  input: {
+    prompt: FINAL_PROMPT,
+    image: imageDataUrl,
+    strength: 0.7
+  }
+})
     });
 
     const createBodyText = await createRes.text();
