@@ -531,8 +531,7 @@ do not replace design`;
   const uploadedImageUrl = await uploadImageToTempUrl(base64DataUrl);
   console.log("Using image URL:", uploadedImageUrl);
   console.log("STRENGTH:", strength);
-
-  console.log("FINAL IMAGE SENT:", image);
+  console.log("FINAL IMAGE SENT:", uploadedImageUrl);
 
   const replicateRes = await fetch("https://api.replicate.com/v1/predictions", {
     method: "POST",
