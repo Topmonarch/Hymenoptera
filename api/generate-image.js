@@ -488,17 +488,21 @@ do not replace design`;
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      version: "7762fd07cf82c948538e41f63f77d685e02b063e0124a3a7481d46b8388c97a2",
+      model: "stability-ai/sdxl",
       input: {
-        image,
         prompt: finalPrompt,
-        strength
+        image,
+        strength: 0.2
       }
     })
   });
 
   const prediction = await replicateRes.json();
-  console.log("Replicate prediction created:", prediction);
+  console.log("Replicate full response:", prediction);
+
+  if (prediction.error) {
+    throw new Error(prediction.error);
+  }
 
   // Poll for completion (max 20 seconds)
   const pollUrl = prediction?.urls?.get;
