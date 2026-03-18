@@ -8,8 +8,8 @@
 //   1. Extract the first reference image from referenceImages.
 //   2. Normalise it to a base64 data URL (data:<mime>;base64,<data>).
 //   3. POST to https://api.replicate.com/v1/predictions using
-//      model "stability-ai/stable-diffusion-img2img" with the image and a fixed realistic-render
-//      prompt.
+//      version "15a3689e3c6c1d8f9c0b63c0d14f7a64e124bdbc5e6f27bb1e6930f33e27e3c8" with the image
+//      and a fixed realistic-render prompt.
 //   4. Poll the returned URL until the prediction succeeds (max 60 s).
 //   5. Return { imageUrl, revisedPrompt } as JSON.
 
@@ -72,7 +72,7 @@ module.exports = async function handler(req, res) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'stability-ai/stable-diffusion-img2img',
+        version: '15a3689e3c6c1d8f9c0b63c0d14f7a64e124bdbc5e6f27bb1e6930f33e27e3c8',
         input: {
           prompt: FINAL_PROMPT,
           image: imageDataUrl,
