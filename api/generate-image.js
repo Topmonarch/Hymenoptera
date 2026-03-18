@@ -13,6 +13,8 @@
 
 'use strict';
 
+const FormData = require('form-data');
+
 const FINAL_PROMPT =
   'Convert this exact drawing into a highly realistic image. Preserve the exact shape, structure, and proportions. Do not change the design. Only enhance realism.';
 
@@ -75,8 +77,10 @@ module.exports = async function handler(req, res) {
 
     // Build multipart form data for OpenAI Images Edits API.
     const formData = new FormData();
-    const imageBlob = new Blob([imageBuffer], { type: mimeType });
-    formData.append('image', imageBlob, filename);
+    formData.append('image', imageBuffer, {
+      filename: filename,
+      contentType: mimeType
+    });
     formData.append('prompt', FINAL_PROMPT);
     formData.append('n', 1);
     formData.append('size', '1024x1024');
@@ -84,7 +88,8 @@ module.exports = async function handler(req, res) {
     const openaiRes = await fetch(OPENAI_IMAGES_EDITS_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        ...formData.getHeaders()
       },
       body: formData
     });
