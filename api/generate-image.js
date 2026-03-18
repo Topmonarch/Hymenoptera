@@ -571,8 +571,7 @@ module.exports = async function handler(req, res) {
       quality,
       referenceImages,
       strictReferenceMode,
-      referenceFidelity,
-      hasReferenceImage: hasReferenceImageFlag
+      referenceFidelity
     } = req.body || {};
 
     // ── Input validation ────────────────────────────────────────────────────
@@ -629,8 +628,13 @@ module.exports = async function handler(req, res) {
 
     // ── Step 2: Detect reference image ──────────────────────────────────────
     // hasReferenceImage is the single source of truth for routing decisions.
-    const hasReferenceImage = refImageList.length > 0 || hasReferenceImageFlag === true;
-    console.log('[DEBUG] hasReferenceImage:', hasReferenceImage);
+    // Only route to image-to-image when there are actual validated images.
+    const hasReferenceImage = refImageList.length > 0;
+    if (hasReferenceImage) {
+      console.log('[IMAGE DETECTED] ' + refImageList.length + ' reference image(s) uploaded — will use image-to-image mode');
+    } else {
+      console.log('[NO IMAGE] no reference images provided — will use text-to-image mode');
+    }
 
     // ── OpenAI API key ──────────────────────────────────────────────────────
 
@@ -665,7 +669,7 @@ module.exports = async function handler(req, res) {
     // ── Step 3: Route to the appropriate generation path ────────────────────
     let result;
     if (hasReferenceImage) {
-      console.log('[ROUTE] image_to_image_route');
+      console.log('[MODE] image-to-image — keeping shape and design from reference image');
       result = await generateImageWithReference({
         apiKey,
         safePrompt,
@@ -675,7 +679,7 @@ module.exports = async function handler(req, res) {
         resolvedQuality
       });
     } else {
-      console.log('[ROUTE] text_to_image_route');
+      console.log('[MODE] text-to-image — generating from prompt only');
       result = await generateImageFromText({
         apiKey,
         safePrompt,
