@@ -401,6 +401,54 @@ async function generateImageFromText(params) {
 }
 
 /**
+ * uploadImageToTempUrl — uploads a base64 data URL to tmpfiles.org and returns
+ * a publicly accessible download URL.  SDXL (and most image-to-image models on
+ * Replicate) require a public HTTP URL rather than a raw base64 string.
+ *
+ * @param {string} base64DataUrl  A data URL like "data:image/png;base64,..."
+ * @returns {Promise<string>}     A public https:// URL pointing to the uploaded file
+ */
+async function uploadImageToTempUrl(base64DataUrl) {
+  const match = base64DataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
+  if (!match) {
+    throw new Error('Invalid base64 data URL format');
+  }
+  const mimeType = match[1];
+  const base64Data = match[2];
+  const buffer = Buffer.from(base64Data, 'base64');
+  const ext = mimeType.split('/')[1] || 'png';
+
+  const formData = new FormData();
+  const blob = new Blob([buffer], { type: mimeType });
+  formData.append('file', blob, `image.${ext}`);
+
+  let uploadRes;
+  try {
+    uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', {
+      method: 'POST',
+      body: formData
+    });
+  } catch (networkErr) {
+    throw new Error(`Network error while uploading image to tmpfiles.org: ${networkErr.message}`);
+  }
+
+  if (!uploadRes.ok) {
+    throw new Error(`Failed to upload image to tmpfiles.org: HTTP ${uploadRes.status}`);
+  }
+
+  const uploadData = await uploadRes.json();
+  if (uploadData.status !== 'success' || !uploadData.data?.url) {
+    throw new Error('Unexpected response from tmpfiles.org: ' + JSON.stringify(uploadData));
+  }
+
+  // tmpfiles.org returns links like https://tmpfiles.org/1234/image.png
+  // The direct-download path requires /dl/ prefix, e.g. https://tmpfiles.org/dl/1234/image.png
+  const parsedUrl = new URL(uploadData.data.url);
+  parsedUrl.pathname = '/dl' + parsedUrl.pathname;
+  return parsedUrl.toString();
+}
+
+/**
  * image_to_image_route — generates an image using an uploaded reference image as
  * the strict design blueprint.  Applies a fidelity-reinforced system prompt,
  * negative constraints, and low-drift configuration to minimise design deviation.
@@ -472,13 +520,16 @@ do not replace design`;
   console.log('[GENERATION] strength=' + config.strength);
   console.log('[GENERATION] prompt=', finalPrompt);
   console.log("USING IMAGE-TO-IMAGE ROUTE");
+  console.log("IMAGE MODE ACTIVE");
 
-  const image = refImageList[0].data.startsWith("data:")
+  const base64DataUrl = refImageList[0].data.startsWith("data:")
     ? refImageList[0].data
     : `data:${refImageList[0].mimeType || "image/png"};base64,${refImageList[0].data}`;
   const strength = config.strength;
 
-  console.log("IMAGE INPUT:", image);
+  // SDXL on Replicate requires a public HTTP URL — upload the base64 image first.
+  const uploadedImageUrl = await uploadImageToTempUrl(base64DataUrl);
+  console.log("Using image URL:", uploadedImageUrl);
   console.log("STRENGTH:", strength);
 
   const replicateRes = await fetch("https://api.replicate.com/v1/predictions", {
@@ -491,8 +542,8 @@ do not replace design`;
       model: "stability-ai/sdxl",
       input: {
         prompt: finalPrompt,
-        image,
-        strength: 0.2
+        image: uploadedImageUrl,
+        strength
       }
     })
   });
