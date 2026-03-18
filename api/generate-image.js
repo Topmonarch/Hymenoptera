@@ -495,7 +495,7 @@ do not replace design`;
   // ── Step 6: Low-drift configuration ────────────────────────────────────
   const config = {
     mode: 'image_to_image',
-    strength: 0.2,
+    strength: 0.1,
     creativity: 'low',
     variation: 'low'
   };
