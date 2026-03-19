@@ -20,7 +20,15 @@ export default async function handler(req, res) {
       })
     });
 
-    const data = await response.json();
+    const text = await response.text();
+console.log("RAW OPENAI RESPONSE:", text);
+
+let data;
+try {
+  data = JSON.parse(text);
+} catch (err) {
+  throw new Error("OpenAI returned non-JSON → " + text);
+}
 
     if (!response.ok) {
       throw new Error(data.error?.message || "Image failed");
