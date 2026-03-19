@@ -13,17 +13,16 @@ module.exports = async function handler(req, res) {
     formData.append('model', 'gpt-image-1');
     formData.append('prompt', prompt);
     formData.append('image', imageBuffer, {
-  filename: 'image.png',
-  contentType: 'image/png'
-});
+      filename: 'image.png',
+      contentType: 'image/png'
+    });
     formData.append('size', '1024x1024');
 
     const openaiRes = await fetch('https://api.openai.com/v1/images/edits', {
       method: 'POST',
-     headers: {
-  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-  ...formData.getHeaders()
-}
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        ...formData.getHeaders()
       },
       body: formData
     });
