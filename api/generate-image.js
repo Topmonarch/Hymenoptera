@@ -31,7 +31,7 @@ try {
 }
 
     if (!response.ok) {
-      throw new Error(data.error?.message || "Image failed");
+      throw new Error(data.error?.message);
     }
 
     return res.status(200).json({
