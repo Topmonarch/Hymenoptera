@@ -12,37 +12,43 @@ export default async function handler(req, res) {
   try {
     const { prompt, image } = req.body;
 
+    // 🛑 Require prompt
     if (!prompt) {
-      return res.status(400).json({ error: "Prompt required" });
+      return res.status(400).json({ error: "Prompt is required" });
     }
 
-    let result;
+    let response;
 
-    // 🧠 IF IMAGE EXISTS → EDIT MODE
+    // 🧠 EDIT MODE (image provided)
     if (image) {
-      result = await openai.images.generate({
+      response = await openai.images.generate({
         model: "gpt-image-1",
         prompt: prompt,
-        image: image, // base64 image OR URL
-        size: "1024x1024"
+        image: image, // 🔥 base64 string from frontend
+        size: "1024x1024",
       });
-    } else {
-      // 🎨 NORMAL GENERATION
-      result = await openai.images.generate({
+    } 
+    // 🎨 GENERATE MODE (no image)
+    else {
+      response = await openai.images.generate({
         model: "gpt-image-1",
         prompt: prompt,
-        size: "1024x1024"
+        size: "1024x1024",
       });
     }
+
+    // ✅ Return base64 image
+    const imageBase64 = response.data[0].b64_json;
 
     return res.status(200).json({
-      image: result.data[0].b64_json
+      image: imageBase64,
     });
 
   } catch (error) {
-    console.error("IMAGE ERROR:", error);
+    console.error("IMAGE GENERATION ERROR:", error);
+
     return res.status(500).json({
-      error: error.message
+      error: error.message || "Something went wrong",
     });
   }
 }
