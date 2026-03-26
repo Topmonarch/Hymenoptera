@@ -1221,12 +1221,13 @@
           assistantText = errMsg;
         } else {
           var imgData = await imgResponse.json();
+          var imageSrc = "data:image/png;base64," + imgData.image;
           if (typingIndicator) typingIndicator.remove();
           // Build an image bubble with download and regenerate controls
           var imgBubble = document.createElement('div');
           imgBubble.className = 'message assistant';
           var imgEl = document.createElement('img');
-          imgEl.src = imgData.imageUrl;
+          imgEl.src = imageSrc;
           imgEl.alt = 'Generated image';
           imgEl.style.cssText = 'max-width:100%;border-radius:8px;display:block;margin-bottom:8px;';
           imgBubble.appendChild(imgEl);
@@ -1239,7 +1240,7 @@
           var btnRow = document.createElement('div');
           btnRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
           var dlBtn = document.createElement('a');
-          dlBtn.href = imgData.imageUrl;
+          dlBtn.href = imageSrc;
           dlBtn.download = 'hymenoptera-image.png';
           dlBtn.target = '_blank';
           dlBtn.rel = 'noopener noreferrer';
