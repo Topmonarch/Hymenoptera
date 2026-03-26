@@ -874,6 +874,15 @@
     return div;
   }
 
+  function fileToBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function (e) { resolve(e.target.result); };
+      reader.onerror = function () { reject(new Error('Failed to read file: ' + file.name)); };
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function sendMessage() {
     if (!messageInput) return;
     var message = (messageInput.value || '').trim();
@@ -1186,6 +1195,12 @@
           imgPayload.referenceFidelity = imgEffectiveFidelity;
           // Keep legacy flag for backward compatibility with any cached server versions
           imgPayload.strictReferenceMode = imgEffectiveFidelity !== 'balanced';
+        }
+
+        var imageInputEl = document.getElementById('imageInput');
+        if (imageInputEl && imageInputEl.files && imageInputEl.files[0]) {
+          imgPayload.image = await fileToBase64(imageInputEl.files[0]);
+          imageInputEl.value = '';
         }
 
         var imgResponse = await fetch('/api/generate-image', {
