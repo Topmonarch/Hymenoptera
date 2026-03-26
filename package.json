@@ -9,6 +9,7 @@
   "dependencies": {
     "form-data": "^4.0.5",
     "nodemailer": "^7.0.11",
+    "openai": "^4.0.0",
     "stripe": "^16.12.0"
   }
 }
